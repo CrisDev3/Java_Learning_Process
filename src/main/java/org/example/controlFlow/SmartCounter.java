@@ -47,6 +47,7 @@ public class SmartCounter {
             System.out.println("\n");
             System.out.println("Gracias por utilizar este programa! Adios.");
             break;
+            
         }
     }
 }
