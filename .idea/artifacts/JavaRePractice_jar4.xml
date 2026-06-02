@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="JavaRePractice:jar4">
+    <output-path>$PROJECT_DIR$/out/artifacts/MortgageCalculator_jar</output-path>
+    <root id="archive" name="JavaRePractice.jar">
+      <element id="module-output" name="JavaRePractice" />
+    </root>
+  </artifact>
+</component>
