@@ -1,0 +1,247 @@
+== Introduction to Generics
+
+**Generics** were introduced in Java 5 to provide **stronger type checks at compile time** and to support generic programming. They allow you to parameterize types (classes, interfaces, and methods), meaning you can design a component that works safely with different data types without rewriting code.
+
+=== The Problem Generics Solve: Type Safety
+
+Before Generics, collections could hold any object type indiscriminately. This forced developers to manually cast data back into its expected type upon retrieval, leading to fragile applications vulnerable to silent runtime failures.
+
+
+
+=== The Poor Historic Solution: The `List` of `Object`
+
+Historically, the only way to make a collection reusable for any data type was to create a list that stored the ultimate parent type: `java.lang.Object`. While this made the collection flexible, it introduced severe design flaws.
+
+==== Code Example: The Risks of a List of Object (Before Generics)
+
+[source,java]
+----
+import java.util.ArrayList;
+import java.util.List;
+
+class ObjectListProblemDemo {
+    public void runOldApproach() {
+        // A list of Object can hold absolutely anything
+        List names = new ArrayList();
+
+        names.add("Alice");
+        names.add("Bob");
+        names.add(42); // Problem: The compiler allows an Integer to slip into a list of "names"!
+
+        // Retrieval requires explicit downcasting
+        for (int i = 0; i < names.size(); i++) {
+            // Dangerous: You must guess or check the type manually
+            String name = (String) names.get(i);
+            System.out.println(name.toUpperCase()); // Crashing point!
+        }
+    }
+}
+----
+
+==== Why the `List` of `Object` is a Poor Solution:
+
+1. **Lack of Type Safety:** The compiler cannot verify what is being added to the collection. A mixture of unrelated objects can occupy the same list without compilation warnings.
+2. **Explicit Casting Overhead:** Every time you retrieve an item, you must explicitly cast it back to its specific type (`(String) names.get(i)`). This makes the code verbose and highly unreadable.
+3. **Runtime Failures (`ClassCastException`):** If an incompatible type accidentally gets inserted (like the integer `42` above), the compiler remains completely silent. The application will blow up at **runtime** with a `ClassCastException` once the cast is executed.
+
+---
+
+=== The Modern Solution: Generics (Java 5+)
+
+Generics shift the responsibility of type verification from the **Runtime phase** to the **Compile phase**, catching bugs before the application ever starts.
+
+[source,java]
+----
+import java.util.ArrayList;
+import java.util.List;
+
+class GenericSolutionDemo {
+    public void runModernApproach() {
+        // Enforcing a strict type contract using angle brackets (<>)
+        List<String> names = new ArrayList<>();
+
+        names.add("Alice");
+        names.add("Bob");
+
+        // names.add(42);
+        // COMPILE ERROR! The compiler instantly blocks this. No bugs slip into runtime.
+
+        // Safe retrieval: No explicit casting or guesswork needed
+        for (String name : names) {
+            System.out.println(name.toUpperCase()); // 100% safe execution
+        }
+    }
+}
+----
+
+== Advanced Generics Concepts
+
+=== 1. Generics and Primitives (Type Erasure Constraint)
+You cannot use primitive types (like `int`, `double`, `char`) as type parameters in Java Generics.
+
+* **The Reason:** Java implements generics using **Type Erasure**. The compiler replaces all generic type parameters with `Object` (or their bounds) during compilation. Because primitives do not inherit from `Object`, they cannot be erased to `Object`.
+* **The Solution:** Use Java's primitive wrapper classes (e.g., `Integer`, `Double`, `Character`). Java will automatically convert between primitives and wrappers via auto-boxing and auto-unboxing.
+
+[source,java]
+----
+import java.util.ArrayList;
+import java.util.List;
+
+class PrimitivesDemo {
+    public void run() {
+        // List<int> scores = new ArrayList<>(); // COMPILE ERROR!
+
+        List<Integer> scores = new ArrayList<>(); // Correct!
+        scores.add(95); // Auto-boxing converts primitive int to Integer
+        int topScore = scores.get(0); // Auto-unboxing converts Integer to primitive int
+    }
+}
+----
+
+=== 2. Bounded Type Parameters (Constraints)
+Sometimes you want a generic class or method to operate only on a specific family of types. Bounded type parameters allow you to restrict what can be passed into a type parameter using the `extends` keyword.
+
+* **Upper Bound (`<T extends ClassOrInterface>`):** Restricts the type parameter to be a specific type or its subclasses/implementations.
+
+[source,java]
+----
+// This class can ONLY be instantiated with Number or its subclasses (Integer, Double, etc.)
+class NumericContainer<T extends Number> {
+    private T number;
+
+    public NumericContainer(T number) { this.number = number; }
+
+    public double square() {
+        // Safe to call doubleValue() because T is guaranteed to be a Number
+        return number.doubleValue() * number.doubleValue();
+    }
+}
+----
+
+=== 3. The `Comparable` Interface and Generics
+The `Comparable<T>` interface is a built-in generic interface used to define the natural ordering of objects. It forces custom types to implement the `compareTo(T o)` method, making them compatible with sorting algorithms like `Collections.sort()`.
+
+[source,java]
+----
+class Employee implements Comparable<Employee> {
+    private String name;
+    private int id;
+
+    public Employee(String name, int id) {
+        this.name = name;
+        this.id = id;
+    }
+
+    @Override
+    public int compareTo(Employee other) {
+        // Compare by ID numbers
+        return Integer.compare(this.id, other.id);
+    }
+}
+----
+
+=== 4. Generic Methods
+You don't have to make an entire class generic to use generics. You can declare generic type parameters scoped strictly to an individual method. The type parameter is placed right before the method's return type.
+
+[source,java]
+----
+class UtilityMethods {
+    // Generic method that accepts an array of any object type and prints it
+    public static <E> void printArray(E[] elements) {
+        for (E element : elements) {
+            System.out.print(element + " ");
+        }
+        System.out.println();
+    }
+}
+----
+
+=== 5. Multiple Type Parameters
+A generic component can define and accept multiple distinct type parameters. By convention, different uppercase letters are used (e.g., `K` for Key, `V` for Value).
+
+[source,java]
+----
+// A generic Pair structure holding two unrelated types
+class Pair<K, V> {
+    private K key;
+    private V value;
+
+    public Pair(K key, V value) {
+        this.key = key;
+        this.value = value;
+    }
+
+    public K getKey() { return key; }
+    public V getValue() { return value; }
+}
+----
+
+=== 6. Generic Classes and Inheritance
+Inheritance rules behave uniquely when dealing with generic types. A key rule to remember is that **generic types are invariant**. Even if `String` is a subclass of `Object`, a `List<String>` is **not** a subclass of `List<Object>`.
+
+However, you can still extend or implement generic classes normally:
+
+[source,java]
+----
+class Box<T> { private T content; }
+
+// Option A: Subclass remains generic, passing the type up
+class SecureBox<T> extends Box<T> { private String passcode; }
+
+// Option B: Subclass fixes the type parameter to a specific concrete type
+class StringBox extends Box<String> { /* Content is now locked to String */ }
+----
+
+=== 7. Wildcards
+Wildcards are represented by the question mark `?` and are used when you want to write code that can accept a variety of generic type collections rather than being locked into one concrete assignment.
+
+
+
+==== A. Unbounded Wildcard (`<?>`)
+Represents an unknown type. Use this when your logic only relies on methods available in the base `Object` class.
+[source,java]
+----
+import java.util.List;
+
+class UnboundedDemo {
+    // Accepts a list of absolutely anything
+    public static void printList(List<?> list) {
+        for (Object elem : list) {
+            System.out.println(elem);
+        }
+    }
+}
+----
+
+==== B. Upper Bounded Wildcard (`<? extends T>`)
+Restricts the wildcard to a specific type or any of its subclasses. This allows you to safely **read** from a collection using polymorphism, but prevents you from **writing** to it (except for `null`).
+[source,java]
+----
+import java.util.List;
+
+class UpperBoundedDemo {
+    // Accepts a list of Numbers, Integers, Doubles, etc.
+    public static double sumOfList(List<? extends Number> list) {
+        double sum = 0.0;
+        for (Number n : list) {
+            sum += n.doubleValue(); // Safe to read as a Number
+        }
+        return sum;
+    }
+}
+----
+
+==== C. Lower Bounded Wildcard (`<? super T>`)
+Restricts the wildcard to a specific type or any of its superclasses (parents). This allows you to safely **write** items of type `T` into the collection.
+[source,java]
+----
+import java.util.List;
+
+class LowerBoundedDemo {
+    // Accepts a list of Integer, Number, or Object
+    public static void addNumbers(List<? super Integer> list) {
+        list.add(1); // Safe to write an Integer
+        list.add(2);
+    }
+}
+----
