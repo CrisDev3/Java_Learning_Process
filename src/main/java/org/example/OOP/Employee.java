@@ -5,7 +5,7 @@ public class Employee {
     private int hourlyRate;
 
     // Static field
-    public  static int numberOfEmployees;
+    public static int numberOfEmployees;
 
     // Constructors is a special method that is called when we create a new object.
     // The job of the default constructor that java creates automatically if we don´t create one is to initialize our fields to our default values.

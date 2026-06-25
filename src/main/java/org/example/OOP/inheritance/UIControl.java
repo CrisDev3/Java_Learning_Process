@@ -1,6 +1,14 @@
 package org.example.OOP.inheritance;
 
-public class UIControl {
+public abstract class UIControl {
+
+//    public UIControl(boolean isEnabled) {
+//        this.isEnabled = isEnabled;
+//        System.out.println("UIControl");
+//    }
+
+    public abstract void render();
+
     private boolean isEnabled = true;
 
     public void enable() {
@@ -12,5 +20,4 @@ public class UIControl {
     }
 
     public boolean isEnabled() {return isEnabled;}
-
 }

@@ -1,0 +1,1075 @@
+= #Inheritance#
+
+== What´s inheritance?
+==== is a fundamental mechanism in Object-Oriented Programming (OOP) that allows a new class (known as a subclass, derived class, or child class) to adopt the attributes (fields) and behaviors (methods) of an existing class (known as a superclass, base class, or parent class). It facilitates code reusability and establishes a hierarchical relationship (an "is-a" relationship) between classes, enabling developers to create more specific classes based on more general ones without rewriting the existing code.
+
+
+== The object class:
+==== In Java, the Object class (java.lang.Object) is the root of the entire class hierarchy. Every single class in Java—whether built-in or user-defined—implicitly inherits from the Object class, making it the ultimate superclass of all objects. Because every class inherits from Object, all Java objects have access to essential methods like:
+
+* toString(): Returns a string representation of the object.
+
+* equals(Object obj): Compares two objects for equality.
+
+* hashCode(): Returns a hash code value for the object (crucial for collections like HashMap). It returns an integer based on the memory address.
+
+* getClass(): Returns the runtime class of the object.
+
+== Constructors and Inheritance
+==== In Java, **constructors are not inherited** by subclasses. Instead, when an instance of a subclass is created, the parent class constructor *must* execute first to initialize the inherited state.
+
+=== Key Rules
+* **Implicit Call:** If a subclass constructor does not explicitly invoke a parent constructor, Java automatically inserts an implicit call to `super();` (the default/no-arg constructor of the parent class) as the very first statement.
+* **Explicit Call:** If the parent class does not have a default constructor (e.g., it only has a parameterized constructor), the subclass *must* explicitly call it using the `super(...)` keyword.
+* **The "First Statement" Rule:** Any call to `super()` or `this()` must strictly be the **first statement** inside the subclass constructor.
+
+=== Code Example
+
+[source,java]
+----
+class Parent {
+    Parent(String message) { // Parameterized constructor
+        System.out.println("Parent: " + message);
+    }
+}
+
+class Child extends Parent {
+    Child() {
+        super("Hello from Child"); // Explicit call required!
+        System.out.println("Child constructor executed.");
+    }
+}
+----
+
+[NOTE]
+====
+If the parent class defines a parameterized constructor and *no* default constructor, omitting `super(...)` in the child constructor will result in a **compile-time error**.
+====
+
+== Access Modifiers and Inheritance
+==== Access modifiers determine which properties and methods a subclass can actually inherit from its parent class.
+
+[cols="1,1,4", options="header"]
+|===
+| Modifier | Inherited? | Description
+| `public` | *Yes* | Accessible from anywhere.
+| `protected`| *Yes* | Accessible within the same package *and* by subclasses in different packages.
+| `default` (no modifier) | *Partially* | Accessible *only* if the subclass is in the same package as the parent.
+| `private` | *No* | Never inherited. Subclasses cannot access private members directly (must use public/protected getters/setters).
+|===
+
+[WARNING]
+====
+When overriding an inherited method, the subclass method **cannot assign a weaker access privilege** than the parent method.
+* *Example:* If a parent method is `protected`, the overriding child method must be `protected` or `public`. It cannot be `private` or default.
+====
+
+== Method Overriding
+
+==== **Method Overriding** occurs when a subclass provides a specific implementation for a method that is already defined in its superclass. It allows polymorphism, enabling a child class to change the behavior of inherited methods.
+
+=== Quick Rules
+
+* **Same Signature:** The method in the subclass must have the exact same name, parameters, and return type (or covariant return type) as the parent method.
+* **Access Modifiers:** The overriding method cannot have a weaker access modifier than the parent method (e.g., overriding a `protected` method as `private` is not allowed).
+* **`@Override` Annotation:** Always use the `@Override` annotation. It tells the compiler to verify the method signature, preventing typos and errors.
+* **Static Methods:** `static` methods cannot be overridden; they can only be hidden.
+
+=== Code Example
+
+[source,java]
+----
+class Animal {
+    void makeSound() {
+        System.out.println("Animal sound");
+    }
+}
+
+class Dog extends Animal {
+    @Override
+    void makeSound() {
+        System.out.println("Bark bark");
+    }
+}
+----
+
+== Upcasting and Downcasting
+
+==== Casting allows you to treat an object of one type as an object of another type within the same inheritance hierarchy.
+
+=== Upcasting
+
+**Upcasting** is casting a subclass reference to a superclass reference.
+
+* **Automatic:** It is done implicitly by Java because a child "is-a" instance of the parent.
+* **Limitation:** Once upcast, you can only access methods defined in the superclass (though overridden methods will still execute the child's version).
+
+[source,java]
+----
+Dog myDog = new Dog();
+Animal myAnimal = myDog; // Implicit upcasting
+----
+
+=== Downcasting
+
+==== **Downcasting** is casting a superclass reference back to a subclass reference.
+
+* **Explicit:** It must be done explicitly because Java cannot guarantee at compile time that the object is actually the specific subclass.
+* **Risk:** If the object is not actually an instance of that subclass at runtime, Java throws a `ClassCastException`.
+* **Safe Practice:** Always use the `instanceof` operator before downcasting to verify the object's actual type.
+
+[source,`java}`
+----
+Animal myAnimal = new Dog(); // Upcast
+
+// Safe downcasting using instanceof
+if (myAnimal instanceof Dog) {
+    Dog myDog = (Dog) myAnimal; // Explicit downcasting
+    myDog.bark();
+}
+----
+
+== Comparing Objects
+
+==== In Java, comparing objects requires understanding the difference between comparing references (memory addresses) and comparing the actual content of the objects.
+
+* **`==` (Reference Equality):** Compares whether two object references point to the exact same memory location in the heap.
+* **`.equals()` (Content Equality):** By default (inherited from `Object`), it behaves just like `==`. However, it is meant to be overridden to compare the actual *values* or data inside the objects (as seen in `String`, `Integer`, etc.).
+
+=== Overriding `equals()` and `hashCode()`
+
+==== If you want to compare custom objects by their content, you must override the `equals()` method. If you override `equals()`, you **must** also override `hashCode()` to maintain the Java contract.
+
+* **The Contract:** If two objects are equal according to the `equals(Object)` method, then calling `hashCode()` on each of the two objects must produce the same integer result.
+
+=== Code Example
+
+[source,java]
+----
+class Student {
+    int id;
+    String name;
+
+    Student(int id, String name) {
+        this.id = id;
+        this.name = name;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        Student student = (Student) obj; // Note the downcasting!
+        return id == student.id;
+    }
+
+    @Override
+    public int hashCode() {
+        return java.util.Objects.hash(id);
+    }
+}
+----
+
+=== `Comparable` vs `Comparator`
+
+==== When you need to sort objects, `equals()` isn't enough; you need to determine order.
+
+* **`Comparable` (`compareTo` method):** Defines the **natural ordering** of the object. The class itself implements this interface.
+* **`Comparator` (`compare` method):** Defines **external/custom ordering**. It is implemented in a separate class or as a lambda expression, allowing multiple different sorting strategies.
+
+== Polymorphism
+
+==== **Polymorphism** (meaning "many forms") is the ability of an object to take on multiple forms. In OOP, it allows a single interface or superclass reference to represent different underlying data types (subclasses).
+
+[cols="1,2,2", options="header"]
+|===
+| Type | How it is achieved | When it is resolved
+| **Compile-time** (Static) | Method Overloading | During compilation
+| **Runtime** (Dynamic) | Method Overriding | During execution (via Virtual Method Invocation)
+|===
+
+=== Dynamic Polymorphism (Runtime)
+
+==== This is the most common use of polymorphism in inheritance. It allows you to write code that interacts with a superclass, but at runtime, Java executes the specific behavior of the subclass object that is actually being referenced.
+
+=== Code Example
+
+[source,java]
+----
+class Shape {
+    void draw() {
+        System.out.println("Drawing a shape");
+    }
+}
+
+class Circle extends Shape {
+    @Override
+    void draw() {
+        System.out.println("Drawing a circle");
+    }
+}
+
+class Square extends Shape {
+    @Override
+    void draw() {
+        System.out.println("Drawing a square");
+    }
+}
+
+// Usage
+public class Main {
+    public static void main(String[] args) {
+        Shape myShape = new Circle(); // Upcasting
+        myShape.draw(); // Prints "Drawing a circle" (Polymorphic behavior)
+    }
+}
+----
+
+=== Key Benefits
+
+* **Extensibility:** You can add new subclasses (e.g., `Triangle`) without changing the code that processes the `Shape` type.
+* **Flexibility:** Allows the creation of polymorphic collections (e.g., a `List<Shape>` that can hold circles, squares, and triangles together).
+
+== Abstract classes and methods
+
+==== An **abstract class** is a restricted class that cannot be used to create objects (it cannot be instantiated). To access it, it must be inherited by another class. An **abstract method** is a method that is declared without an implementation.
+
+=== Key Characteristics
+
+* **Instantiation:** You cannot create an instance of an abstract class using the `new` keyword (e.g., `new Animal()` will throw a compilation error if `Animal` is abstract).
+* **Abstract Methods:** Can only exist inside an abstract class. They have no body (no `{}`) and end with a semicolon.
+* **Mandatory Implementation:** The first concrete (non-abstract) subclass that extends an abstract class **must** provide implementations for all inherited abstract methods.
+* **Mixed Content:** Unlike interfaces (traditionally), abstract classes can contain a mix of both abstract methods (without a body) and concrete methods (with a body), as well as instance variables of any access modifier.
+* **Constructors:** Abstract classes *can* have constructors. They are called when a concrete subclass is instantiated (via constructor chaining).
+
+=== Code Example
+
+[source,java]
+----
+// Abstract class
+abstract class Appliance {
+    String brand;
+
+    // Constructor
+    Appliance(String brand) {
+        this.brand = brand;
+    }
+
+    // Abstract method (no body)
+    abstract void turnOn();
+
+    // Regular/Concrete method
+    void displayBrand() {
+        System.out.println("Brand: " + brand);
+    }
+}
+
+// Concrete subclass
+class Refrigerator extends Appliance {
+    Refrigerator(String brand) {
+        super(brand);
+    }
+
+    // Implementing the abstract method
+    @Override
+    void turnOn() {
+        System.out.println("Cooling system activated.");
+    }
+}
+----
+
+=== When to use Abstract Classes?
+
+==== Use an abstract class when you want to share code (concrete methods and fields) among several closely related objects, while still forcing those subclasses to implement specific, unique behaviors.
+
+== Final classes and methods
+
+==== In Java, the `final` keyword is used to restrict the user. It can be applied to classes, methods, and variables. In the context of inheritance, it is used to prevent extension or overriding.
+
+=== Final Classes
+
+==== When a class is declared as `final`, **it cannot be subclassed (inherited)**.
+* **Purpose:** Security, immutability, and performance optimization.
+* **Example:** The Java standard `String` class is `final` so its behavior cannot be altered or corrupted by malicious subclasses.
+
+[source,java]
+----
+final class SecuritySystem {
+    // Code here
+}
+// class AdvancedSystem extends SecuritySystem {} // COMPILE ERROR!
+----
+
+=== Final Methods
+When a method is declared as `final`, **it cannot be overridden** by subclasses.
+* **Purpose:** Use this when you want to lock down a specific behavior so that no child class can ever alter its core logic.
+
+[source,java]
+----
+class BankAccount {
+    final void deposit(double amount) {
+        // Core secure logic that must never be changed
+    }
+}
+----
+
+=== When to use `final`?
+1. **Immutability:** When creating an immutable class (like a custom read-only data record).
+2. **Security:** To prevent core system classes from being maliciously swapped with sub-classes via polymorphism.
+3. **Design Clarity:** If a class is completely self-contained and you cannot envision a logical "is-a" relationship extending from it.
+
+== Avoid Deep inheritance hierarquies
+
+==== A **deep inheritance hierarchy** occurs when a class extends a class, which extends another class, and so on (e.g., `ClassG extends ClassF ... extends ClassA`). While inheritance is powerful, nesting it too deeply leads to rigid, fragile, and unmaintainable code.
+
+=== The Problems with Deep Inheritance
+
+1. **The Fragile Base Class Problem:** A small change in a top-level superclass can unintentionally break functionality in subclasses several layers down.
+2. **High Coupling:** Subclasses become tightly bound to the internal implementation details of every single parent class above them.
+3. **Low Readability:** To understand how a leaf-node class works, a developer has to trace methods and variables across 5 or 6 different files.
+4. **Lack of Flexibility:** Java only allows single inheritance. If a class is stuck at the bottom of a deep hierarchy, it cannot easily inherit behavior from a different family tree.
+
+=== The Rule of Thumb
+
+==== Keep inheritance hierarchies **shallow**—ideally no more than **2 to 3 levels deep** (including the `Object` class).
+
+=== The Solution: Composition Over Inheritance
+
+==== Instead of designing code around what an object **is** (Inheritance), design it around what an object **has** or **does** (Composition).
+
+* **Inheritance (Is-A):** Tight coupling.
+* **Composition (Has-A):** Loose coupling. You give your class an instance variable that references another class, allowing you to swap behaviors dynamically.
+
+[source,java]
+----
+// BAD: Deep Inheritance
+class Vehicle {}
+class MotorizedVehicle extends Vehicle {}
+class Car extends MotorizedVehicle {}
+class ElectricCar extends Car {} // 4 levels deep! What if we want an ElectricTruck?
+
+// GOOD: Composition
+class Engine {
+    void start() { System.out.println("Electric motor humming..."); }
+}
+
+class Car {
+    private Engine engine; // Car HAS AN Engine (Composition)
+
+    Car(Engine engine) {
+        this.engine = engine;
+    }
+
+    void drive() {
+        engine.start();
+    }
+}
+----
+
+== Multiple Inheritance in Java
+
+==== **Multiple inheritance** is a feature of some object-oriented programming languages where a class can inherit behaviors and attributes from more than one superclass.
+
+==== **Java does not support multiple inheritance with classes.** A class can only extend one single parent class.
+
+=== Why Java Disallows It: The Diamond Problem
+
+==== If Class `A` has a method `doSomething()`, and both Class `B` and Class `C` inherit and override that method differently, what happens if Class `D` tries to inherit from both `B` and `C`?
+
+=== When `D` calls `doSomething()`, Java wouldn't know which version to execute (`B`'s or `C`'s). This ambiguity is known as the **Diamond Problem**. To prevent this complexity, Java design choices forbade multiple inheritance of classes entirely.
+
+=== The Solution: Multiple Inheritance via Interfaces
+
+==== While a Java class cannot extend multiple classes, **it can implement multiple interfaces**.
+
+==== Interfaces traditionally only declared abstract methods without state (variables) or implementation, which completely avoids the Diamond Problem.
+
+[source,java]
+----
+interface Swimmer {
+    void swim();
+}
+
+interface Flyer {
+    void fly();
+}
+
+// A class can implement multiple interfaces seamlessly
+class Duck implements Swimmer, Flyer {
+    @Override
+    public void swim() {
+        System.out.println("Duck is swimming.");
+    }
+
+    @Override
+    public void fly() {
+        System.out.println("Duck is flying.");
+    }
+}
+----
+
+=== Java 8+ Default Methods (The Exception)
+
+==== Starting in Java 8, interfaces can have `default` methods (methods with an actual code body). This introduced a mild form of multiple inheritance of behavior.
+
+==== If a class implements two interfaces that happen to have the exact same `default` method signature, Java forces the programmer to explicitly resolve the conflict by overriding the method:
+
+[source,java]
+----
+interface InterfaceA {
+    default void log() { System.out.println("Log A"); }
+}
+
+interface InterfaceB {
+    default void log() { System.out.println("Log B"); }
+}
+
+class Logger implements InterfaceA, InterfaceB {
+    // Explicitly resolving the conflict is MANDATORY
+    @Override
+    public void log() {
+        InterfaceA.super.log(); // Explicitly chooses InterfaceA's logic
+    }
+}
+----
+
+== Interfaces
+
+==== An **interface** in Java is a blueprint of a class. It is a collection of abstract methods and static constants that specifies *what* a class should do, but not *how* it should do it. It is used to achieve full abstraction and multiple inheritance in Java.
+
+=== Key Characteristics
+
+* **Instantiation:** Like abstract classes, interfaces cannot be instantiated (`new InterfaceName()` is invalid).
+* **Methods:** By default, all methods in an interface are implicitly `public` and `abstract` (except for `default` and `static` methods introduced in newer Java versions). You do not need to type those keywords.
+* **Variables:** Any variables declared inside an interface are implicitly `public static final` (constants). They must be initialized when declared.
+* **Implementation:** A class uses the `implements` keyword to use an interface and must provide concrete implementations for all its abstract methods.
+
+=== Code Example
+
+[source,java]
+----
+interface Animal {
+    int LEGS = 4; // Implicitly public static final
+
+    void eat();   // Implicitly public abstract
+}
+
+class Tiger implements Animal {
+    @Override
+    public void eat() {
+        System.out.println("The tiger eats meat.");
+    }
+}
+----
+
+=== Abstract Class vs. Interface
+
+[cols="1,2,2", options="header"]
+|===
+| Feature | Abstract Class | Interface
+| **Inheritance** | A class can extend only *one* abstract class. | A class can implement *multiple* interfaces.
+| **State (Variables)** | Can have instance variables (fields with state). | Can only have `public static final` constants.
+| **Constructors** | Can have constructors. | Cannot have constructors.
+| **Speed** | Slightly faster than interfaces because it avoids lookup overhead. | Requires a search through the implementation hierarchy at runtime.
+|===
+
+=== When to use Interfaces?
+
+==== Use an interface when you want to define a specific **contract or capability** that can be shared by completely unrelated classes (e.g., `Serializable`, `Cloneable`, `Runnable`). It focuses on a polymorphic role rather than a shared family identity.
+
+== Dependency injection
+
+==== **Dependency Injection** is a design pattern used to achieve **Inversion of Control (IoC)** between classes and their dependencies. Instead of a class creating the objects it needs to function (its dependencies) internally, those dependencies are "injected" into the class from the outside.
+
+=== The Core Problem: Hard-coded Dependencies
+
+==== Without DI, classes are tightly coupled. If Class `A` manually creates an instance of Class `B` using the `new` keyword, Class `A` cannot be easily tested in isolation, and you cannot swap Class `B` for an alternative implementation without changing Class `A`'s source code.
+
+=== Types of Dependency Injection
+
+1. **Constructor Injection:** Dependencies are provided through the class constructor. *This is the most recommended approach because it ensures the class is always initialized in a valid state.*
+2. **Setter Injection:** Dependencies are provided through public setter methods after the object is instantiated.
+3. **Field Injection:** Dependencies are injected directly into fields (usually via frameworks using reflection/annotations).
+4. **Method Injection:** The dependency is passed directly into a specific method as an argument when that method is called, rather than being stored as a class field. *Use this when the dependency varies with every single method execution, or when the dependency is only needed for that specific action.*
+
+=== Code Example: Before vs. After DI
+
+==== Before DI (Tightly Coupled)
+[source,java]
+----
+class Car {
+    private Engine engine;
+
+    public Car() {
+        this.engine = new V8Engine(); // Hard-coded dependency! Rigid and untestable.
+    }
+}
+----
+
+==== After DI (Loosely Coupled via Constructor Injection)
+[source,java]
+----
+interface Engine { void start(); }
+
+class Car {
+    private final Engine engine;
+
+    // The dependency is INJECTED from the outside
+    public Car(Engine engine) {
+        this.engine = engine;
+    }
+}
+----
+
+=== Benefits of Dependency Injection
+
+* **Decoupling:** Classes don't need to know how to construct their dependencies.
+* **Testability:** You can easily inject "Mock" or "Stub" objects during unit testing instead of relying on production databases or external APIs.
+* **Flexibility:** You can swap implementations seamlessly at runtime or through configuration (e.g., switching from a `MySQLDatabase` to a `MongoDatabase`) as long as they implement the same interface.
+
+[NOTE]
+====
+In large-scale Java development, Dependency Injection is usually managed automatically by containers or frameworks like **Spring** or **Dagger**, rather than manual wiring.
+====
+
+== Interface Segregation Principle (ISP)
+
+==== The **Interface Segregation Principle** states that **no client should be forced to depend on methods it does not use**. Instead of creating one large, bloated interface (often called a "fat" or "polluted" interface), you should break it down into smaller, highly specific ones.
+
+=== The Core Problem: Fat Interfaces
+
+==== When an interface grows too large, any class implementing it is forced to provide concrete implementations for every single method—even those it doesn't need. This leads to empty method bodies, throwing `UnsupportedOperationException`, and unnecessary re-compilations whenever the fat interface changes.
+
+=== Code Example: Before vs. After ISP
+
+==== Before ISP (Violating the Principle)
+[source,java]
+----
+// A "fat" interface forcing all workers to implement everything
+interface SmartWorker {
+    void work();
+    void eat();
+}
+
+class Robot implements SmartWorker {
+    public void work() { System.out.println("Robot working..."); }
+    public void eat() {
+        // Violates ISP! Robots don't eat.
+        throw new UnsupportedOperationException("Robots don't eat");
+    }
+}
+----
+
+==== After ISP (Adhering to the Principle)
+[source,java]
+----
+// Separated into specialized, lean interfaces
+interface Workable { void work(); }
+interface Feedable { void eat(); }
+
+class Human implements Workable, Feedable {
+    public void work() { System.out.println("Human working..."); }
+    public void eat() { System.out.println("Human eating..."); }
+}
+
+class Robot implements Workable {
+    public void work() { System.out.println("Robot working smoothly..."); }
+    // No need to implement eat() anymore!
+}
+----
+
+=== Key Benefits
+
+* **High Cohesion:** Interfaces are focused on one single responsibility or capability.
+* **Loose Coupling:** Clients only rely on the exact methods they actually need, preventing collateral breakage when unrelated code changes.
+* **Flexibility:** Classes can pick and choose precisely which capabilities they want to adopt by implementing multiple small interfaces.
+
+== The Controversy of Modern Interface Features
+
+Since Java 8 and 9, interfaces can contain **fields (constants)**, **static methods**, and **private methods**. While added to aid backward compatibility, many senior developers consider heavy use of these features a **bad practice** or an **anti-pattern**.
+
+=== 1. Interface Fields (The Constant Interface Anti-Pattern)
+Interfaces can only hold `public static final` constants. Using them to store configuration values or global constants is highly discouraged.
+
+* **Why it's bad:** It leaks implementation details. If a class implements an interface just to use its constants, those constants become part of the class's public API forever. This pollutes the autocomplete namespace and violates encapsulation.
+* **The Better Alternative:** Use a non-instantiable utility class (`final class` with a `private` constructor) or a Java `enum` to store constants.
+
+=== 2. Static Methods in Interfaces
+Java 8 allowed interfaces to hold `static` utility methods.
+
+* **Why it's bad:** It blurs the architectural line between an *interface* (a behavior contract) and a *utility class* (a collection of helper functions). It also creates confusion because interface static methods are **not inherited** by implementing classes, leading to unexpected compilation traps.
+* **The Better Alternative:** Keep utility logic in dedicated helper classes (e.g., how `java.util.Collections` holds utilities for the `Collection` interface).
+
+=== 3. Private Methods in Interfaces
+Java 9 introduced `private` and `private static` methods inside interfaces, purely to reduce code duplication among multiple `default` methods.
+
+* **Why it's bad:** If your interface has so many `default` methods that they require shared `private` helper methods, **your interface is doing too much**. It is a major code smell indicating that the interface is acting like an abstract class, violating the *Interface Segregation Principle (ISP)* and introducing hidden state logic.
+* **The Better Alternative:** Refactor the complex logic into a proper class or a collaborator component via *Dependency Injection*.
+
+=== Summary Perspective
+
+[QUOTE]
+____
+"Interfaces should dictate **WHAT** a system does, not **HOW** it does it."
+____
+
+Senior developers resist these features because they turn interfaces into ** stateless abstract classes**. They tempt developers to bypass proper object-oriented design, leading to bloated, hard-to-test, and highly coupled codebases.
+
+== Abstract Classes vs. Interfaces (Modern Java)
+
+While modern Java features allow interfaces to hold behavior (via `default` and `static` methods), they are still fundamentally different mechanisms.
+
+=== The Conceptual Difference
+* **Abstract Class:** Defines what an object **IS** (Identity / Conceptual Family). It represents a strong, shared lineage.
+* **Interface:** Defines what an object **CAN DO** (Capability / Role). It represents a contract or a peripheral feature.
+
+=== Architectural Comparison Matrix
+
+[cols="1,2,2", options="header"]
+|===
+| Feature | Abstract Class | Interface (Modern Java)
+| **Inheritance** | A class can `extend` only **one** class (Single Inheritance). | A class can `implement` **multiple** interfaces.
+| **State / Fields** | Can have **instance fields** (instance state variables). | Can only have `public static final` **constants**.
+| **Constructors** | **Yes**, can have constructors to initialize parent state. | **No**, cannot have constructors.
+| **Methods** | Can have instance methods, private, protected, public, final, abstract, and static methods. | Can have abstract, `default`, `static`, and `private` methods. All must be `public` by default.
+| **Access Modifiers** | Completely flexible (`private`, `protected`, `public`, default). | Restricted. Members are implicitly `public` (except `private` methods).
+|===
+
+=== Why the Meaning Hasn't Changed (The "State" Factor)
+
+Senior developers still separate them based on **State**:
+* **Interfaces are Stateless:** An interface can never hold an instance variable (e.g., `private int age;`). It can only manipulate arguments passed to it or constants.
+* **Abstract Classes are Stateful:** An abstract class can have non-static fields that change over time, tracking the internal lifecycle/state of the object.
+
+=== Code Dilemma: Which one to choose?
+
+==== Use an Abstract Class when:
+1. You want to share code among several closely related classes that naturally fit an **"is-a"** relationship tree (e.g., `SaveAccount` and `CheckingAccount` are both a `BankAccount`).
+2. You need to inherit or manage an internal, non-static object state.
+3. You need to use access modifiers other than `public` for methods or fields.
+
+==== Use an Interface when:
+1. You want to define a specific polymorphic role or capability for completely unrelated classes (e.g., both a `User` entity and a `DatabaseConnection` can be `Loggable`).
+2. You want to take advantage of multiple inheritance of behavior.
+3. You are designing a public API or API gateway contract that shouldn't worry about internal mechanics.
+4. You need to **decouple architectural layers**, ensuring that the consumer of a service depends only on an abstract contract rather than a volatile concrete implementation.
+
+
+== **Advances topics**
+
+== **EXCEPTIONS**
+=== What is an Exception?
+
+At its core, an **Exception** is an event that occurs during the execution of a program that disrupts the normal flow of instructions.
+
+Think of it as a runtime signal: when an error happens inside a method, the method creates an object—an **Exception Object**—and hands it off to the runtime system. This object contains information about the error, including its type and the state of the program when it occurred.
+
+The primary goal of exception handling is to transition from a **fatal crash** to a **controlled detour**, allowing your application to log the issue, clean up resources, and continue running smoothly.
+
+== Types of Exceptions in Java
+
+Java categorizes exceptions into **three main types** based on how the Java compiler and runtime treat them. Understanding these types is crucial for writing clean, predictable code.
+
+
+
+=== 1. Checked Exceptions (Compile-Time Exceptions)
+
+**Checked exceptions** are conditions that a well-written application should anticipate and recover from. The Java compiler **strictly enforces** that these exceptions must be handled before the code can even compile.
+
+* **Behavior:** If a method throws a checked exception, the calling code *must* either handle it using a `try-catch` block or declare it in its method signature using the `throws` keyword.
+* **When they occur:** Usually during interactions with external systems, networks, or file systems where things outside of your code's control can go wrong.
+* **Examples:**
+** `IOException`: Failed network or file read/write operations.
+** `FileNotFoundException`: Attempting to access a file on disk that does not exist.
+** `SQLException`: Errors interacting with a relational database.
+
+=== 2. Unchecked Exceptions (Runtime Exceptions)
+
+**Unchecked exceptions** are conditions that usually occur due to programming errors, logic flaws, or improper use of an API. They extend the `RuntimeException` class.
+
+* **Behavior:** The compiler **does not check** for these exceptions. You are not forced to wrap them in a `try-catch` or declare them with `throws`. They will compile perfectly fine, but they will crash the application at runtime if they occur.
+* **When they occur:** Due to bugs in the code logic that should be fixed by the programmer rather than caught at runtime.
+* **Examples:**
+** `NullPointerException (NPE)`: Attempting to call a method or access a field on an object reference that is `null`.
+** `ArrayIndexOutOfBoundsException`: Trying to access an array index that is negative or greater than or equal to the size of the array.
+** `IllegalArgumentException`: Passing an invalid or inappropriate argument to a method.
+
+=== 3. Errors
+
+**Errors** represent severe, abnormal problems that occur at the system or JVM level.
+
+* **Behavior:** Like unchecked exceptions, they are not checked by the compiler. However, **you should never attempt to catch or handle an Error**. They indicate fatal situations that the application cannot realistically recover from.
+* **When they occur:** When the JVM completely runs out of resources or encounters a catastrophic failure.
+* **Examples:**
+** `OutOfMemoryError (OOM)`: The JVM has run out of heap memory and cannot allocate any more objects.
+** `StackOverflowError`: A method calls itself recursively too many times, running out of stack space.
+
+---
+
+=== Quick Comparison Summary
+
+[cols="1,3,3", options="header"]
+|===
+| Property | Checked Exception | Unchecked Exception (Runtime)
+| **Catch/Declare?** | **Mandatory** (Enforced by compiler) | **Optional** (Handled via proper code logic)
+| **Root Class** | Subclass of `Exception` | Subclass of `RuntimeException`
+| **Core Cause** | External environment factors | Internal programmer/logic bugs
+| **Best Fix** | Handle gracefully via `try-catch` | Fix the underlying code bug
+|===
+
+== The Java Exception Hierarchy
+
+In Java, exceptions are organized in a strict object-oriented class hierarchy. Every exception, error, and runtime failure is represented by a concrete class. At the absolute top of this family tree sits the `Throwable` class.
+
+
+=== The Structural Breakdown
+
+==== 1. java.lang.Throwable
+This is the **ultimate root class** for all exceptions and errors in the Java language. Only objects that inherit from this class (or its subclasses) can be thrown by the JVM or caught using the `try-catch` mechanism.
+
+==== 2. java.lang.Error (Subclass of Throwable)
+Errors represent catastrophic, fatal conditions that happen at the system or JVM level.
+* **Rule:** Applications should **never** try to catch or handle an `Error`. If your application hits an Error, the best outcome is to let the program crash and log the system state.
+* **Key Subclasses:** `OutOfMemoryError`, `StackOverflowError`, `VirtualMachineError`.
+
+==== 3. java.lang.Exception (Subclass of Throwable)
+This branch represents conditions that a reasonable, well-built application should anticipate and handle gracefully. The `Exception` class is split into two distinct paths:
+
+* **Checked Exceptions:** Any class that directly extends `Exception` (and is *not* a subclass of `RuntimeException`) is a checked exception. The compiler forces you to handle these.
+** *Key Subclasses:* `IOException`, `SQLException`, `ClassNotFoundException`.
+
+* **Unchecked Exceptions (`RuntimeException`):** Any class that extends `java.lang.RuntimeException` forms the unchecked exception branch. These bypass compiler checks and represent logic mistakes.
+** *Key Subclasses:* `NullPointerException`, `ArithmeticException`, `IndexOutOfBoundsException`.
+
+---
+
+=== Textual Representation of the Hierarchy Tree
+
+To visualize it simply in code/text, the tree looks like this:
+
+----
+Object
+  └── Throwable
+        ├── Error
+        │     ├── OutOfMemoryError
+        │     ├── StackOverflowError
+        │     └── UnknownError
+        │
+        └── Exception
+              ├── IOException (Checked)
+              │     └── FileNotFoundException
+              ├── SQLException (Checked)
+              │
+              └── RuntimeException (Unchecked)
+                    ├── NullPointerException
+                    ├── ArithmeticException
+                    └── ArrayIndexOutOfBoundsException
+----
+
+=== Why the Hierarchy Matters for Code Design
+
+Because exceptions are just standard Java classes, **polymorphism applies to them**.
+
+When catching exceptions, you can catch a specific child exception or a broad parent exception. However, best practices dictate catching the most specific type possible:
+
+[source,java]
+----
+import java.io.FileReader;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+
+class HierarchyPolymorphismDemo {
+    public void demoCatchingOrder(String filePath) {
+        try {
+            FileReader reader = new FileReader(filePath);
+        } catch (FileNotFoundException e) {
+            // Good practice: Catches specifically what went wrong
+            System.err.println("Specific handler: File missing!");
+        } catch (IOException e) {
+            // Catching the parent wrapper (Valid, but broader)
+            System.err.println("General I/O handler: Error reading stream.");
+        } catch (Exception e) {
+            // Catching the ultimate parent (Catches everything, risky!)
+            System.err.println("Catch-all handler for unintended runtime issues.");
+        }
+    }
+}
+----
+
+== Handling Multiple Exceptions
+
+In production applications, a single block of code inside a `try` block can often throw more than one type of exception. Java provides clean, efficient ways to handle multiple distinct errors without repeating code.
+
+=== Approaches to Handling Multiple Exceptions
+
+==== 1. Multiple `catch` Blocks
+You can chain multiple `catch` blocks after a single `try` block. Each `catch` block handles a specific exception type.
+
+* **Rule of Order:** You **must** catch the most specific (child) exceptions first, followed by the more general (parent) exceptions. If you catch a parent exception (like `IOException`) before a child exception (like `FileNotFoundException`), the compiler will throw an error because the child catch block is unreachable.
+
+[source,java]
+----
+import java.io.FileReader;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+
+class MultiCatchDemo {
+    public void executeFileOperations(String filePath) {
+        try {
+            FileReader reader = new FileReader(filePath);
+            int data = reader.read(); // Might throw IOException
+        } catch (FileNotFoundException e) {
+            // Highly specific exception caught first
+            System.err.println("Specific Error: The file could not be found.");
+        } catch (IOException e) {
+            // General parent exception caught second
+            System.err.println("General Error: An I/O error occurred while reading.");
+        } catch (Exception e) {
+            // Ultimate fallback catch-all
+            System.err.println("Unexpected Error: " + e.getMessage());
+        }
+    }
+}
+----
+
+==== 2. The Multi-Catch Block (Java 7+)
+If you want to handle different, completely unrelated exceptions using the **exact same logic**, you can combine them into a single `catch` block using the pipe (`\|`) operator. This significantly reduces code duplication.
+
+* **Rule of Finality:** The exception variable in a multi-catch block (e.g., `e` in the example below) is implicitly `final`. You cannot reassign a new value to it inside the catch block.
+* **Rule of Hierarchy:** You cannot combine exceptions in a multi-catch block if they share a direct parent-child inheritance relationship (e.g., `catch (FileNotFoundException | IOException e)` is a compile error because `IOException` already covers it).
+
+[source,java]
+----
+import java.sql.SQLException;
+import java.io.IOException;
+
+class UnifiedMultiCatchDemo {
+    public void processData() {
+        try {
+            // Code that might connect to a database or read a system configuration file
+            System.out.println("Processing database and configuration actions...");
+        } catch (IOException | SQLException e) {
+            // Handles BOTH exceptions with the exact same recovery logic
+            System.err.println("Critical Failure: System operation halted due to hardware or database failure.");
+            System.err.println("Details: " + e.getMessage());
+        }
+    }
+}
+----
+
+== The `finally` Block
+
+The `finally` block is a key component of Java's exception handling mechanism. It contains code that is **guaranteed to execute**, regardless of whether an exception is thrown, caught, or completely absent.
+
+
+
+=== Key Characteristics
+
+* **Guaranteed Execution:** The `finally` block runs after the `try` block finishes normally, or after a `catch` block finishes processing an error.
+* **Cleanup Duty:** Its primary real-world purpose is **resource management**—closing open files, network sockets, database connections, or releasing locks to prevent memory and system leaks.
+* **Execution with Returns:** Even if a `try` or `catch` block contains a `return` statement, the `finally` block will still execute *before* the method actually returns the value to the caller.
+
+=== The Only Exceptions to the Rule
+The `finally` block will run almost 100% of the time, *except* in these extreme scenarios:
+1. The JVM is forcibly terminated using `System.exit(0);`.
+2. The underlying operating system crashes or loses power.
+3. The thread executing the code is killed or interrupted unexpectedly.
+
+=== Code Example: Traditional Resource Cleanup
+
+[source,java]
+----
+import java.io.FileReader;
+import java.io.IOException;
+
+class FinallyDemo {
+    public void readFileSecurely(String filePath) {
+        FileReader reader = null;
+        try {
+            reader = new FileReader(filePath);
+            int data = reader.read();
+            System.out.println("Data read successfully.");
+        } catch (IOException e) {
+            System.err.println("Error encountered: " + e.getMessage());
+        } finally {
+            // This block ALWAYS executes
+            System.out.println("Executing finally block for resource cleanup...");
+            if (reader != null) {
+                try {
+                    reader.close(); // Crucial step to avoid resource leaks
+                    System.out.println("FileReader closed successfully.");
+                } catch (IOException e) {
+                    System.err.println("Failed to close reader: " + e.getMessage());
+                }
+            }
+        }
+    }
+}
+----
+
+=== Modern Alternative: Try-With-Resources (Java 7+)
+
+While the `finally` block is great for general cleanup, using it manually to close resources can lead to bulky, nested `try-catch` structures (as seen above). Modern Java code prefers **Try-With-Resources**, which implicitly creates a hidden `finally` block to close anything implementing `AutoCloseable`.
+
+[source,java]
+----
+import java.io.FileReader;
+import java.io.IOException;
+
+class TryWithResourcesDemo {
+    public void streamlinedReadFile(String filePath) {
+        // The resource is declared inside the try parentheses.
+        // Java automatically closes it at the end, eliminating the need for a manual finally block.
+        try (FileReader reader = new FileReader(filePath)) {
+            int data = reader.read();
+        } catch (IOException e) {
+            System.err.println("Error: " + e.getMessage());
+        }
+    }
+}
+----
+
+== The `finally` Block
+
+The `finally` block is a key component of Java's exception handling mechanism. It contains code that is **guaranteed to execute**, regardless of whether an exception is thrown, caught, or completely absent.
+
+
+
+=== Key Characteristics
+
+* **Guaranteed Execution:** The `finally` block runs after the `try` block finishes normally, or after a `catch` block finishes processing an error.
+* **Cleanup Duty:** Its primary real-world purpose is **resource management**—closing open files, network sockets, database connections, or releasing locks to prevent memory and system leaks.
+* **Execution with Returns:** Even if a `try` or `catch` block contains a `return` statement, the `finally` block will still execute *before* the method actually returns the value to the caller.
+
+=== The Only Exceptions to the Rule
+The `finally` block will run almost 100% of the time, *except* in these extreme scenarios:
+1. The JVM is forcibly terminated using `System.exit(0);`.
+2. The underlying operating system crashes or loses power.
+3. The thread executing the code is killed or interrupted unexpectedly.
+
+=== Code Example: Traditional Resource Cleanup
+
+[source,java]
+----
+import java.io.FileReader;
+import java.io.IOException;
+
+class FinallyDemo {
+    public void readFileSecurely(String filePath) {
+        FileReader reader = null;
+        try {
+            reader = new FileReader(filePath);
+            int data = reader.read();
+            System.out.println("Data read successfully.");
+        } catch (IOException e) {
+            System.err.println("Error encountered: " + e.getMessage());
+        } finally {
+            // This block ALWAYS executes
+            System.out.println("Executing finally block for resource cleanup...");
+            if (reader != null) {
+                try {
+                    reader.close(); // Crucial step to avoid resource leaks
+                    System.out.println("FileReader closed successfully.");
+                } catch (IOException e) {
+                    System.err.println("Failed to close reader: " + e.getMessage());
+                }
+            }
+        }
+    }
+}
+----
+
+=== Modern Alternative: Try-With-Resources (Java 7+)
+
+While the `finally` block is great for general cleanup, using it manually to close resources can lead to bulky, nested `try-catch` structures (as seen above). Modern Java code prefers **Try-With-Resources**, which implicitly creates a hidden `finally` block to close anything implementing `AutoCloseable`.
+
+[source,java]
+----
+import java.io.FileReader;
+import java.io.IOException;
+
+class TryWithResourcesDemo {
+    public void streamlinedReadFile(String filePath) {
+        // The resource is declared inside the try parentheses.
+        // Java automatically closes it at the end, eliminating the need for a manual finally block.
+        try (FileReader reader = new FileReader(filePath)) {
+            int data = reader.read();
+        } catch (IOException e) {
+            System.err.println("Error: " + e.getMessage());
+        }
+    }
+}
+----
+
+== Throwing and Re-throwing Exceptions
+
+Exceptions don't just happen automatically; you can deliberately control the flow of your application by manually initiating exceptions or passing them up the call stack to a component better equipped to handle them.
+
+
+
+=== 1. Throwing an Exception (`throw`)
+
+The `throw` keyword is used to explicitly clear the normal execution path and hand an exception object over to the runtime system. This is typically used when validation checks fail or a method detects that its preconditions have been violated.
+
+* **Behavior:** Once a `throw` statement is hit, execution of the current method stops immediately. The JVM looks down the execution stack for a matching `catch` block.
+
+[source,java]
+----
+class Account {
+    private double balance = 100.0;
+
+    public void withdraw(double amount) {
+        if (amount > balance) {
+            // Manually creating and throwing a runtime exception
+            throw new IllegalArgumentException("Insufficient funds! Cannot withdraw: " + amount);
+        }
+        balance -= amount;
+    }
+}
+----
+
+=== 2. Declaring Exceptions (`throws`)
+
+If a method throws a *checked* exception, it must advertise this fact in its signature using the `throws` keyword. This forces any caller of this method to either wrap the call in a `try-catch` block or declare the exception themselves.
+
+[source,java]
+----
+import java.io.IOException;
+
+class DataExporter {
+    // The throws keyword acts as a warning sign to any method calling this one
+    public void exportData(String data) throws IOException {
+        if (data == null) {
+            throw new IOException("Export failed: Data payload cannot be null.");
+        }
+        System.out.println("Exporting data stream...");
+    }
+}
+----
+
+=== 3. Re-throwing an Exception
+
+Sometimes, a method catches an exception but cannot completely resolve the issue itself. You can catch the exception, perform local actions (like logging or rolling back a local transaction), and then use the `throw` keyword again to pass that same exception—or a brand new one—up to the calling method.
+
+* **Chained Exceptions:** When throwing a new exception from inside a catch block, it is best practice to pass the original exception into the constructor of the new one. This preserves the root cause stack trace.
+
+[source,java]
+----
+import java.sql.SQLException;
+
+class DatabaseManager {
+    public void executeQuery() throws RuntimeException {
+        try {
+            // Simulating a database failure
+            throw new SQLException("Connection timed out.");
+        } catch (SQLException e) {
+            // Local Action: Log the specific technical database error
+            System.err.println("Database error logged locally: " + e.getMessage());
+
+            // Re-throwing a clean, business-level abstraction wrapper
+            // Passing 'e' ensures the original stack trace trace isn't lost
+            throw new RuntimeException("Application failed to fetch user record.", e);
+        }
+    }
+}
+----
