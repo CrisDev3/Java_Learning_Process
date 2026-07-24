@@ -1,0 +1,1152 @@
+== Functional Interfaces
+
+Introduced in Java 8, a **Functional Interface** is an interface that contains **exactly one abstract method**. They serve as the target types for **Lambda Expressions** and **Method References**, enabling functional programming capabilities in Java.
+
+=== The `@FunctionalInterface` Annotation
+
+While optional, annotating an interface with `@FunctionalInterface` is a best practice. It instructs the compiler to verify that the interface contains exactly one abstract method. If a developer accidentally adds a second abstract method, the compiler will raise an error immediately.
+
+* **Non-Abstract Exemption:** A functional interface can still declare `default` methods, `static` methods, or public methods inherited from `java.lang.Object` without violating the single abstract method rule.
+
+[source,java]
+----
+@FunctionalInterface
+public interface Validator<T> {
+    // The Single Abstract Method (SAM)
+    boolean validate(T input);
+
+    // Default methods do NOT count against the SAM rule
+    default Validator<T> and(Validator<T> other) {
+        return input -> validate(input) && other.validate(input);
+    }
+}
+----
+
+---
+
+=== The Built-in Core Functional Interfaces (`java.util.function`)
+
+Rather than forcing developers to invent custom interfaces for every scenario, Java 8 provides a set of general-purpose functional interfaces in the `java.util.function` package. The four primary base interfaces are:
+
+[cols="1,2,2,2", options="header"]
+|===
+| Interface | Abstract Method | Signature | Common Use Case
+| **`Predicate<T>`** | `boolean test(T t)` | `T -> boolean` | Filtering data or evaluation checks.
+| **`Function<T, R>`** | `R apply(T t)` | `T -> R` | Transforming or mapping an input into an output.
+| **`Consumer<T>`** | `void accept(T t)` | `T -> void` | Performing actions on data (e.g., printing, saving).
+| **`Supplier<T>`** | `T get()` | `() -> T` | Factory generation or lazy value instantiation.
+|===
+
+---
+
+=== Code Example: Utilizing Built-in Functional Interfaces
+
+[source,java]
+----
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
+
+class FunctionalInterfacesDemo {
+    public void executeExamples() {
+        // 1. Predicate: Accepts a String and evaluates if length > 5
+        Predicate<String> isLongWord = text -> text.length() > 5;
+        System.out.println("Is 'Java' a long word? " + isLongWord.test("Java")); // false
+
+        // 2. Function: Accepts a String and returns its Integer length
+        Function<String, Integer> stringToLength = text -> text.length();
+        System.out.println("Length of 'Generics': " + stringToLength.apply("Generics")); // 8
+
+        // 3. Consumer: Accepts a value and performs a side effect
+        Consumer<String> printer = message -> System.out.println("LOG: " + message);
+        printer.accept("Functional programming active"); // Prints log statement
+
+        // 4. Supplier: Takes no inputs, supplies a double value on demand
+        Supplier<Double> randomValue = () -> Math.random();
+        System.out.println("Generated value: " + randomValue.get());
+    }
+}
+----
+
+---
+
+=== Primitive Specialized Variations
+
+Because generics do not work directly with primitive types, using `Function<Integer, Double>` causes hidden auto-boxing and unboxing overhead. To prevent performance degradation, Java offers unboxed primitive variations:
+
+* **For Primitives:** `IntPredicate`, `LongConsumer`, `DoubleSupplier`, `IntToDoubleFunction`, etc.
+* **For Two Arguments:** `BiPredicate<T, U>`, `BiFunction<T, U, R>`, `BiConsumer<T, U>`.
+* **Same Input/Output Types:** `UnaryOperator<T>` (extends `Function<T, T>`), `BinaryOperator<T>` (extends `BiFunction<T, T, T>`).
+
+
+== Anonymous Inner Classes
+
+An **Anonymous Inner Class** is an inner class declared without an explicit name. It combines class definition and object instantiation into a single statement, allowing you to subclass a class or implement an interface on the fly.
+
+Before the introduction of Lambda expressions in Java 8, anonymous inner classes were the primary mechanism in Java for passing behavior dynamically as arguments (such as event listeners or custom sorting logic).
+
+=== Core Characteristics
+
+1. **No Explicit Name:** The compiler automatically assigns an internal name generated at compile time (e.g., `OuterClass$1.class`).
+2. **Instant Creation:** Declared and instantiated in a single expression using the `new` keyword followed by the target interface or class name.
+3. **One-Time Use:** Because the class has no name, you cannot reuse it elsewhere in your codebase to create additional instances.
+4. **Access to Enclosing Scope:** Anonymous inner classes can access members of their enclosing class and local variables from the surrounding block, provided those variables are `final` or **effectively final** (never reassigned after initialization).
+
+---
+
+=== Code Example: Implementing Interfaces and Extending Classes
+
+An anonymous inner class can be created by implementing an interface or by overriding methods of an existing concrete or abstract class.
+
+[source,java]
+----
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+
+abstract class Greeting {
+    abstract void greet();
+}
+
+class AnonymousInnerClassDemo {
+    public void executeExamples() {
+        // 1. Implementing an Interface on the fly (Runnable)
+        Runnable task = new Runnable() {
+            @Override
+            public void run() {
+                System.out.println("Task running inside an anonymous class!");
+            }
+        };
+        new Thread(task).start();
+
+        // 2. Overriding an Abstract Class on the fly
+        Greeting englishGreeting = new Greeting() {
+            @Override
+            void greet() {
+                System.out.println("Hello, World!");
+            }
+        };
+        englishGreeting.greet();
+
+        // 3. Passing as a method argument (Comparator)
+        List<String> names = new ArrayList<>(List.of("Charlie", "Bob", "Alice"));
+        Collections.sort(names, new Comparator<String>() {
+            @Override
+            public int compare(String s1, String s2) {
+                return Integer.compare(s1.length(), s2.length());
+            }
+        });
+        System.out.println("Sorted by length: " + names);
+    }
+}
+----
+
+---
+
+=== Anonymous Inner Classes vs. Lambda Expressions
+
+While Lambda expressions have largely superseded anonymous inner classes when dealing with **Functional Interfaces**, anonymous inner classes are still required in certain scenarios.
+
+[cols="1,2,2", options="header"]
+|===
+| Feature | Anonymous Inner Class | Lambda Expression
+| **Target Requirement** | Works with **any** interface, abstract class, or concrete class. | Works **only** with **Functional Interfaces** (single abstract method).
+| **`this` Keyword Reference** | Refers to the **anonymous inner class instance** itself. | Refers to the **enclosing outer class** instance (lexical scoping).
+| **State / Fields** | Can define its own instance fields and multiple methods. | Cannot define its own instance fields or additional methods.
+| **Compiled Output** | Generates a separate `.class` file (e.g., `Demo$1.class`). | Optimized via `invokedynamic` byte-code without generating extra `.class` files.
+|===
+
+== Lambda Expressions
+
+Introduced in Java 8, **Lambda Expressions** provide a clear, concise way to represent inline implementations of single-method interfaces (Functional Interfaces). They treat code as data, allowing you to pass functionality into methods as easily as passing variables.
+
+=== Syntax Structure
+
+A lambda expression consists of three distinct components:
+1. **Parameter List:** Matches the arguments expected by the functional interface's abstract method. Parameter types can usually be inferred by the compiler.
+2. **Arrow Token (`->`):** Separates the parameters from the body.
+3. **Lambda Body:** Contains expressions or statement blocks executed when the lambda is called.
+
+==== Syntax Simplification Rules
+* **Single Parameter:** Parentheses can be omitted if there is only one parameter (e.g., `x -> x * 2`).
+* **Single Statement:** Curly braces `{}` and the `return` keyword can be omitted for single-expression bodies (e.g., `(a, b) -> a + b`).
+* **Multi-Statement Block:** Curly braces `{}` and explicit `return` statements are required if the body spans multiple lines.
+
+---
+
+=== Variable Capture and Scope Rules
+
+Lambda expressions do not introduce a new inner class scope; they operate within the **lexical scope** of their enclosing block.
+
+* **Effectively Final Restriction:** Local variables declared outside a lambda can be accessed inside the lambda body **only if** they are `final` or **effectively final** (their values are never modified after assignment).
+* **The `this` Keyword:** Inside a lambda expression, `this` refers to the **enclosing outer class instance**, unlike anonymous inner classes where `this` refers to the anonymous instance itself.
+
+---
+
+=== Code Example: Evolving Syntax (Old vs. New)
+
+[source,java]
+----
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import java.util.function.BinaryOperator;
+
+class LambdaExpressionsDemo {
+    public void executeExamples() {
+        List<String> cities = new ArrayList<>(List.of("Tokyo", "New York", "Paris"));
+
+        // 1. Traditional Anonymous Inner Class Approach
+        Collections.sort(cities, new Comparator<String>() {
+            @Override
+            public int compare(String a, String b) {
+                return Integer.compare(a.length(), b.length());
+            }
+        });
+
+        // 2. Equivalent Lambda Expression (Explicit Parameters & Block Body)
+        Collections.sort(cities, (String a, String b) -> {
+            return Integer.compare(a.length(), b.length());
+        });
+
+        // 3. Fully Concise Lambda Expression (Type Inference & Single-Expression Body)
+        cities.sort((a, b) -> Integer.compare(a.length(), b.length()));
+        System.out.println("Sorted Cities: " + cities);
+
+        // 4. Variable Capture Mechanics
+        String prefix = "City: "; // Effectively final local variable
+        cities.forEach(city -> System.out.println(prefix + city)); // Allowed
+
+        // String prefix = "Update"; // Un-commenting this re-assignment breaks the lambda compiler check!
+    }
+}
+----
+
+---
+
+=== Lambda Expressions vs. Method References
+
+When a lambda expression simply delegates directly to an existing method without modifying the arguments, it can be simplified further using a **Method Reference** (`Class::methodName`).
+
+[cols="1,2,2", options="header"]
+|===
+| Lambda Expression | Equivalent Method Reference | Reference Type
+| `str -> System.out.println(str)` | `System.out::println` | Instance Method of an Object
+| `(a, b) -> Math.max(a, b)` | `Math::max` | Static Method
+| `str -> str.toUpperCase()` | `String::toUpperCase` | Instance Method of an Arbitrary Object
+| `() -> new ArrayList<>()` | `ArrayList::new` | Constructor Reference
+|===
+
+
+== Variable Capture in Java
+
+**Variable Capture** refers to the mechanism by which a Lambda Expression or Anonymous Inner Class accesses ("captures") variables declared outside its own body in the surrounding scope.
+
+Because local variables live on the call stack and are destroyed when a method finishes executing, while lambdas and anonymous classes can outlive the method execution (for example, when passed to an asynchronous thread or stored in a field), Java must safely copy these variables into the lambda/inner class instance.
+
+
+=== The "Effectively Final" Rule
+
+To prevent concurrency bugs, race conditions, and memory corruption between the stack and the heap, Java enforces a strict constraint: **a captured local variable must be `final` or effectively final**.
+
+* **Definition:** A variable is **effectively final** if its value is initialized once and never modified anywhere in the code after initialization, even if it lacks the explicit `final` keyword.
+* **Why the Restriction?** Java captures local variables **by value**, not by reference. If Java allowed a lambda to modify a local variable, the change wouldn't be reflected on the stack frame once the method exited, creating misleading synchronization bugs.
+
+---
+
+=== What Can Be Captured?
+
+The capture rules depend on the scope and type of variable being accessed:
+
+[cols="1,2,3", options="header"]
+|===
+| Variable Type | Allowed to Capture? | Modification Allowed inside Lambda?
+| **Local Variables** | Only if `final` or **effectively final**. | **No.** Causes a compilation error.
+| **Method Parameters** | Only if `final` or **effectively final**. | **No.** Causes a compilation error.
+| **Instance Fields** (`this.field`) | **Yes.** Captured by reference. | **Yes.** Instance variables live on the heap, not the stack.
+| **Static Fields** | **Yes.** Unrestricted access. | **Yes.** Class-level variables live in global state.
+|===
+
+---
+
+=== Code Example: Variable Capture Patterns and Errors
+
+[source,java]
+----
+import java.util.function.Consumer;
+
+class VariableCaptureDemo {
+    private int instanceCounter = 0; // Instance variable (Heap)
+    private static int globalCounter = 0; // Static variable (Global)
+
+    public void demonstrateCapture() {
+        int localVal = 10; // Effectively final local variable
+        int mutableVal = 20;
+
+        mutableVal = 25; // Re-assignment breaks "effectively final" status!
+
+        // 1. Valid Capture of Effectively Final Local Variable
+        Consumer<Integer> validLambda = input -> {
+            System.out.println("Result: " + (input + localVal)); // OK!
+        };
+
+        // 2. Invalid Capture Attempt (Compilation Error)
+        // Consumer<Integer> invalidLambda = input -> {
+        //     System.out.println(input + mutableVal); // ERROR: Variable must be final or effectively final
+        // };
+
+        // 3. Invalid Modification Attempt (Compilation Error)
+        // Consumer<Integer> invalidMutation = input -> {
+        //     localVal = 50; // ERROR: Cannot reassign local variable inside lambda
+        // };
+
+        // 4. Valid Capture and Modification of Instance & Static Variables
+        Consumer<Integer> heapLambda = input -> {
+            instanceCounter += input; // OK! Modifying heap-allocated field
+            globalCounter += input;   // OK! Modifying static field
+            System.out.println("Instance: " + instanceCounter + ", Static: " + globalCounter);
+        };
+
+        heapLambda.accept(5);
+    }
+}
+----
+
+---
+
+=== Common Workaround: Capturing Mutable State
+
+If you legitimately need to mutate state from within a lambda body, you cannot use primitive local variables. Instead, wrap the value in a heap-allocated object (such as a single-element array or `AtomicInteger`), making the container reference `final`:
+
+[source,java]
+----
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+
+class MutableCaptureWorkaround {
+    public void runWorkaround() {
+        List<String> items = List.of("Apple", "Banana", "Cherry");
+
+        // Workaround Strategy: The reference to 'counter' is final, but its contents change on the heap
+        AtomicInteger counter = new AtomicInteger(0);
+
+        items.forEach(item -> {
+            int current = counter.incrementAndGet(); // Modifying internal state is allowed!
+            System.out.println(current + ". " + item);
+        });
+    }
+}
+----
+
+== Method References in Java
+
+A **Method Reference** is a shorthand, highly readable syntax for a Lambda Expression that does nothing more than invoke an existing method by name. Introduced alongside lambdas in Java 8, method references leverage the double colon operator (`::`) to treat functions directly as first-class citizens without repeating argument lists.
+
+When a lambda simply forwards its parameters directly to a method without applying extra logic or transformations, a method reference is preferred as it reduces boilerplate and improves code clarity.
+
+=== The Four Types of Method References
+
+Method references fall into four distinct categories based on whether they reference static methods, instance methods, or constructors:
+
+[cols="1,2,2,2", options="header"]
+|===
+| Category | Syntax | Equivalent Lambda Expression | Example
+| **1. Static Method** | `ClassName::staticMethodName` | `(args) -> ClassName.staticMethodName(args)` | `Math::max`
+| **2. Instance Method of a Particular Object** | `instanceRef::methodName` | `(args) -> instanceRef.methodName(args)` | `System.out::println`
+| **3. Instance Method of an Arbitrary Object** | `ClassName::methodName` | `(obj, args) -> obj.methodName(args)` | `String::toUpperCase`
+| **4. Constructor Reference** | `ClassName::new` | `(args) -> new ClassName(args)` | `ArrayList::new`
+|===
+
+---
+
+=== Deep Dive: Particular Object vs. Arbitrary Object
+
+The distinction between Type 2 and Type 3 often causes confusion:
+
+* **Bound Instance Reference (Particular Object):** The target object is known at the time the reference is evaluated.
+** *Lambda:* `s -> consolePrinter.print(s)`
+** *Method Reference:* `consolePrinter::print` (The `consolePrinter` object is bound upfront).
+
+* **Unbound Instance Reference (Arbitrary Object):** The target object is passed as the first parameter to the underlying functional method.
+** *Lambda:* `(str1, str2) -> str1.compareToIgnoreCase(str2)`
+** *Method Reference:* `String::compareToIgnoreCase` (The first `String` parameter becomes the invocation target).
+
+---
+
+=== Code Example: Demonstration Across All Four Types
+
+[source,java]
+----
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.function.BiFunction;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
+
+class User {
+    private String name;
+
+    public User() {
+        this.name = "Anonymous";
+    }
+
+    public User(String name) {
+        this.name = name;
+    }
+
+    public String getName() { return name; }
+    public void printCustomGreeting(String greeting) {
+        System.out.println(greeting + ", " + name);
+    }
+}
+
+class MethodReferencesDemo {
+    public void executeAllTypes() {
+        // Type 1: Static Method Reference
+        // Lambda: (a, b) -> Math.max(a, b)
+        BiFunction<Integer, Integer, Integer> maxFinder = Math::max;
+        System.out.println("Max result: " + maxFinder.apply(10, 20));
+
+        // Type 2: Instance Method of a Particular Object
+        User instance = new User("Alice");
+        // Lambda: greeting -> instance.printCustomGreeting(greeting)
+        Consumer<String> greeter = instance::printCustomGreeting;
+        greeter.accept("Welcome");
+
+        // Type 3: Instance Method of an Arbitrary Object of a Given Type
+        List<String> fruits = Arrays.asList("banana", "apple", "cherry");
+        // Lambda: (a, b) -> a.compareToIgnoreCase(b)
+        fruits.sort(String::compareToIgnoreCase);
+        System.out.println("Sorted Fruits: " + fruits);
+
+        // Type 4: Constructor References
+        // Lambda: () -> new User()
+        Supplier<User> defaultUserFactory = User::new;
+        User u1 = defaultUserFactory.get();
+
+        // Lambda: name -> new User(name)
+        Function<String, User> namedUserFactory = User::new;
+        User u2 = namedUserFactory.apply("Bob");
+
+        // Array Constructor Reference
+        // Lambda: size -> new String[size]
+        Function<Integer, String[]> arrayFactory = String[]::new;
+        String[] stringArray = arrayFactory.apply(5);
+    }
+}
+----
+
+---
+
+=== When NOT to Use Method References
+
+While method references make code cleaner in straightforward delegation scenarios, you should stick to standard lambda expressions when:
+
+1. **Parameters are Transformed:** You manipulate parameters before passing them (e.g., `x -> System.out.println(x.trim())`).
+2. **Ambiguity Arises:** Overloaded methods make it hard to determine which method is being referenced, leading to compiler ambiguity errors.
+3. **Complex Logic:** The operation requires multiple statements or conditional logic.
+
+== The `Consumer` Interface
+
+The `Consumer<T>` interface (`java.util.function.Consumer`) is a core functional interface introduced in Java 8. As its name implies, it represents an operation that **accepts a single input argument and consumes it** to perform a side effect—returning no result (`void`).
+
+It is widely used across the Java ecosystem for side-effect operations such as printing data, logging events, updating an object's internal state, or persisting records to a database.
+
+=== The Interface Contract
+
+The `@FunctionalInterface` contains a single abstract method alongside a default method for operational chaining:
+
+[source,java]
+----
+@FunctionalInterface
+public interface Consumer<T> {
+    // Single Abstract Method (SAM)
+    void accept(T t);
+
+    // Default method used to sequence multiple consumer actions
+    default Consumer<T> andThen(Consumer<T> after) {
+        Objects.requireNonNull(after);
+        return (T t) -> { accept(t); after.accept(t); };
+    }
+}
+----
+
+---
+
+=== Chaining Consumers with `andThen()`
+
+The `andThen()` default method allows you to compose multiple `Consumer` instances into a execution pipeline. When triggered via `accept()`, the combined consumer executes the first consumer's action and immediately follows it with the next, passing the same input argument to both.
+
+---
+
+=== Code Example: Standard Usage, Method References, and Chaining
+
+[source,java]
+----
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Consumer;
+
+class ConsumerInterfaceDemo {
+    public void executeExamples() {
+        // 1. Basic Lambda Implementation
+        Consumer<String> logger = message -> System.out.println("[LOG]: " + message);
+        logger.accept("Application booted successfully.");
+
+        // 2. Usage in Iterable.forEach()
+        List<String> servers = List.of("Server-01", "Server-02", "Server-03");
+
+        // Passing a Consumer via Method Reference
+        servers.forEach(System.out::println);
+
+        // 3. Chaining Multiple Consumers using andThen()
+        Consumer<String> dbWriter = server -> System.out.println("[DB]: Writing audit log for " + server);
+        Consumer<String> emailAlert = server -> System.out.println("[EMAIL]: Sent status report for " + server);
+
+        // Combine dbWriter and emailAlert into a unified pipeline
+        Consumer<String> auditPipeline = dbWriter.andThen(emailAlert);
+
+        System.out.println("--- Executing Combined Consumer Pipeline ---");
+        auditPipeline.accept("Server-01");
+    }
+}
+----
+
+---
+
+=== Specialized Primitive and Multi-Argument Variants
+
+To avoid performance overhead caused by auto-boxing primitive types, and to support operations taking two arguments, the `java.util.function` package provides specialized variants of `Consumer`:
+
+[cols="1,2,2", options="header"]
+|===
+| Variant Interface | Method Signature | Primary Use Case
+| **`BiConsumer<T, U>`** | `void accept(T t, U u)` | Consuming two inputs (e.g., iterating through a `Map` using `.forEach((key, value) -> ...)`).
+| **`IntConsumer`** | `void accept(int value)` | Consuming primitive `int` values without auto-boxing.
+| **`LongConsumer`** | `void accept(long value)` | Consuming primitive `long` values without auto-boxing.
+| **`DoubleConsumer`** | `void accept(double value)` | Consuming primitive `double` values without auto-boxing.
+| **`ObjIntConsumer<T>`** | `void accept(T t, int value)` | Consuming an object reference alongside a primitive `int` (e.g., object + index position).
+|===
+
+== The `Supplier` Interface
+
+The `Supplier<T>` interface (`java.util.function.Supplier`) is the functional exact opposite of `Consumer`. It represents an operation that **takes no input parameters and produces (supplies) a result of type `T`**.
+
+It is widely used across Java for **lazy evaluation**—delaying expensive operations until the precise moment a value is actually needed—as well as factory pattern instantiation, generating random values, and constructing default values via `Optional.orElseGet()`.
+
+=== The Interface Contract
+
+The `@FunctionalInterface` contains a single abstract method with no inputs:
+
+[source,java]
+----
+@FunctionalInterface
+public interface Supplier<T> {
+    // Single Abstract Method (SAM)
+    T get();
+}
+----
+
+Unlike `Consumer` or `Function`, `Supplier` has no default or static chaining methods (like `andThen()`), because it produces a value without taking an initial parameter to pipe along.
+
+---
+
+=== Primary Use Case: Lazy Evaluation
+
+A major advantage of `Supplier` is avoiding unnecessary work. Consider logging a debug message or generating a fallback default value:
+
+* **Eager Execution:** `logger.debug(computeExpensiveString());` executes `computeExpensiveString()` **every time**, even if the log level is currently set to `INFO` and the output is discarded.
+* **Lazy Execution:** `logger.debug(() -> computeExpensiveString());` passes a `Supplier`. The method `computeExpensiveString()` is only invoked inside `get()` **if** the logger decides it actually needs to output a debug statement.
+
+---
+
+=== Code Example: Factory Creation, Lazy Evaluation, and Method References
+
+[source,java]
+----
+import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.function.Supplier;
+
+class User {
+    private String username;
+
+    public User() {
+        this.username = "Guest";
+    }
+
+    public String getUsername() { return username; }
+}
+
+class SupplierInterfaceDemo {
+    public void executeExamples() {
+        // 1. Basic Value Generation
+        Supplier<LocalDateTime> currentTimeSupplier = () -> LocalDateTime.now();
+        System.out.println("Current Time: " + currentTimeSupplier.get());
+
+        // 2. Factory Pattern with Constructor Reference
+        Supplier<User> userFactory = User::new;
+        User defaultUser = userFactory.get(); // Creates a new User instance on demand
+        System.out.println("New User Created: " + defaultUser.getUsername());
+
+        // 3. Lazy Evaluation with Optional.orElseGet()
+        Optional<String> cachedData = Optional.empty();
+
+        // orElseGet accepts a Supplier: expensiveCalculation() runs ONLY because cachedData is empty
+        String result = cachedData.orElseGet(() -> fetchFromRemoteDatabase());
+        System.out.println("Resolved Data: " + result);
+    }
+
+    private String fetchFromRemoteDatabase() {
+        System.out.println("[DB] Executing expensive network call...");
+        return "Database Payload";
+    }
+}
+----
+
+---
+
+=== Primitive Specialized Variations
+
+To avoid auto-boxing overhead when producing primitive values, the `java.util.function` package includes specialized primitive versions of `Supplier`:
+
+[cols="1,2,2", options="header"]
+|===
+| Variant Interface | Method Signature | Primary Use Case
+| **`IntSupplier`** | `int getAsInt()` | Supplying primitive `int` values (e.g., random integers, counter sequences).
+| **`LongSupplier`** | `long getAsLong()` | Supplying primitive `long` values (e.g., timestamps, high-precision IDs).
+| **`DoubleSupplier`** | `double getAsDouble()` | Supplying primitive `double` values (e.g., `Math::random`).
+| **`BooleanSupplier`** | `boolean getAsBoolean()` | Supplying primitive `boolean` flag checks dynamically.
+|===
+
+== The `Function` Interface
+
+The `Function<T, R>` interface (`java.util.function.Function`) is one of the foundational functional interfaces introduced in Java 8. It represents an operation that **accepts one argument of type `T` and produces a result of type `R`**.
+
+It serves as the workhorse for data transformation pipelines—such as mapping objects from one type to another, extracting properties, or calculating derived values—and underpins key Stream API operations like `Stream.map()`.
+
+
+=== The Interface Contract
+
+The `@FunctionalInterface` contains a single abstract method alongside default utility methods for function composition:
+
+[source,java]
+----
+@FunctionalInterface
+public interface Function<T, R> {
+    // Single Abstract Method (SAM): Transforms T into R
+    R apply(T t);
+
+    // Executes 'before' function first, then passes its result to 'this'
+    default <V> Function<V, R> compose(Function<? super V, ? extends T> before) {
+        Objects.requireNonNull(before);
+        return (V v) -> apply(before.apply(v));
+    }
+
+    // Executes 'this' first, then passes its result to 'after' function
+    default <V> Function<T, V> andThen(Function<? super R, ? extends V> after) {
+        Objects.requireNonNull(after);
+        return (T t) -> after.apply(apply(t));
+    }
+
+    // Returns a function that always returns its input argument
+    static <T> Function<T, T> identity() {
+        return t -> t;
+    }
+}
+----
+
+---
+
+=== Chaining Functions: `andThen()` vs. `compose()`
+
+Function composition is a core principle of functional programming. The `Function` interface provides two complementary methods to chain transformations:
+
+* **`andThen()` (Forward Chaining):** Executes the current function first, then passes the output to the next function.
+** *Logic:* `f1.andThen(f2)` $\rightarrow$ $f2(f1(x))$
+* **`compose()` (Backward Chaining):** Executes the parameter function first, then passes its output to the current function.
+** *Logic:* `f1.compose(f2)` $\rightarrow$ $f1(f2(x))$
+
+---
+
+=== Code Example: Transformations, Chaining, and Stream Mapping
+
+[source,java]
+----
+import java.util.List;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+class Employee {
+    private String name;
+    private double salary;
+
+    public Employee(String name, double salary) {
+        this.name = name;
+        this.salary = salary;
+    }
+
+    public String getName() { return name; }
+    public double getSalary() { return salary; }
+}
+
+class FunctionInterfaceDemo {
+    public void executeExamples() {
+        // 1. Basic Type Transformation (String -> Integer)
+        Function<String, Integer> stringToLength = String::length;
+        System.out.println("Length of 'AsciiDoc': " + stringToLength.apply("AsciiDoc")); // 8
+
+        // 2. Chaining Transformations with andThen() and compose()
+        Function<Integer, Integer> multiplyByTwo = x -> x * 2;
+        Function<Integer, Integer> addTen = x -> x + 10;
+
+        // andThen: (5 * 2) = 10 -> (10 + 10) = 20
+        Function<Integer, Integer> multiplyThenAdd = multiplyByTwo.andThen(addTen);
+        System.out.println("andThen result (5): " + multiplyThenAdd.apply(5)); // 20
+
+        // compose: (5 + 10) = 15 -> (15 * 2) = 30
+        Function<Integer, Integer> addThenMultiply = multiplyByTwo.compose(addTen);
+        System.out.println("compose result (5): " + addThenMultiply.apply(5)); // 30
+
+        // 3. Transformation in Stream.map()
+        List<Employee> staff = List.of(
+            new Employee("Alice", 85000),
+            new Employee("Bob", 62000)
+        );
+
+        // Function extracts employee names for transformation
+        List<String> names = staff.stream()
+                                  .map(Employee::getName)
+                                  .collect(Collectors.toList());
+        System.out.println("Extracted Names: " + names);
+    }
+}
+----
+
+---
+
+=== Specialized Primitive and Multi-Argument Variants
+
+To prevent hidden performance penalties from auto-boxing primitives, and to accommodate multi-input mapping scenarios, Java provides several specialized variations:
+
+[cols="1,2,2", options="header"]
+|===
+| Variant Interface | Method Signature | Primary Use Case
+| **`BiFunction<T, U, R>`** | `R apply(T t, U u)` | Transforms **two** input arguments of types `T` and `U` into result `R`.
+| **`UnaryOperator<T>`** | `T apply(T t)` | Special `Function<T, T>` where input and output types are identical.
+| **`BinaryOperator<T>`** | `T apply(T t1, T t2)` | Special `BiFunction<T, T, T>` where both inputs and output share the same type.
+| **`ToIntFunction<T>`** | `int applyAsInt(T value)` | Maps an object to a primitive `int` (avoids `Integer` boxing).
+| **`IntToDoubleFunction`** | `double applyAsDouble(int value)` | Transforms a primitive `int` directly into a primitive `double`.
+|===
+
+== Composing Functions
+
+Function composition allows you to combine simple, single-purpose functions into complex transformation pipelines. The `Function<T, R>` interface provides two default methods for chaining: **`andThen()`** and **`compose()`**.
+
+The difference lies entirely in **execution order**:
+
+[cols="1,2,2", options="header"]
+|===
+| Method | Execution Order | Mathematical Logic
+| **`f1.andThen(f2)`** | Executes **`f1` first**, then passes the result to `f2`. | $f_2(f_1(x))$ (Left-to-Right)
+| **`f1.compose(f2)`** | Executes **`f2` first**, then passes the result to `f1`. | $f_1(f_2(x))$ (Right-to-Left)
+|===
+
+---
+
+=== Quick Code Example
+
+[source,java]
+----
+import java.util.function.Function;
+
+class FunctionCompositionDemo {
+    public void runComposition() {
+        Function<String, String> trim = String::trim;
+        Function<String, String> toUpper = String::toUpperCase;
+        Function<String, String> addQuotes = text -> "'" + text + "'";
+
+        // Pipeline: Trim space -> Convert to UPPERCASE -> Wrap in Quotes
+        Function<String, String> sanitize = trim.andThen(toUpper).andThen(addQuotes);
+
+        String result = sanitize.apply("   hello world   ");
+        System.out.println(result); // Outputs: 'HELLO WORLD'
+    }
+}
+----
+
+== The `Predicate` Interface
+
+The `Predicate<T>` interface (`java.util.function.Predicate`) is a core functional interface introduced in Java 8. It represents a single-argument function that evaluates an input against a condition and returns a **`boolean` result (`true` or `false`)**.
+
+It forms the backbone of conditional evaluation in Java, powering operations like filtering collections in `Stream.filter()`, conditional removal via `Collection.removeIf()`, and validating object states.
+
+=== The Interface Contract
+
+The `@FunctionalInterface` contains a single abstract method alongside default and static methods for logical composition (AND, OR, NOT):
+
+[source,java]
+----
+@FunctionalInterface
+public interface Predicate<T> {
+    // Single Abstract Method (SAM): Evaluates the input condition
+    boolean test(T t);
+
+    // Logical AND composition
+    default Predicate<T> and(Predicate<? super T> other) {
+        Objects.requireNonNull(other);
+        return (t) -> test(t) && other.test(t);
+    }
+
+    // Logical OR composition
+    default Predicate<T> or(Predicate<? super T> other) {
+        Objects.requireNonNull(other);
+        return (t) -> test(t) || other.test(t);
+    }
+
+    // Logical NOT (negation)
+    default Predicate<T> negate() {
+        return (t) -> !test(t);
+    }
+
+    // Static helper to test equality against a target object
+    static <T> Predicate<T> isEqual(Object targetRef) {
+        return (null == targetRef)
+                ? Objects::isNull
+                : object -> targetRef.equals(object);
+    }
+
+    // Static helper (added in Java 11) to negate a predicate reference
+    static <T> Predicate<T> not(Predicate<? super T> target) {
+        Objects.requireNonNull(target);
+        return (Predicate<T>)target.negate();
+    }
+}
+----
+
+---
+
+=== Composing Predicates: `and()`, `or()`, and `negate()`
+
+`Predicate` provides rich logical operators that allow complex conditions to be built declaratively out of small, reusable rules:
+
+[cols="1,2,2", options="header"]
+|===
+| Method | Logical Operation | Equivalent Expression
+| **`p1.and(p2)`** | Logical AND (`&&`) | `p1.test(x) && p2.test(x)`
+| **`p1.or(p2)`** | Logical OR (`\|\|`) | `p1.test(x) \|\| p2.test(x)`
+| **`p1.negate()`** | Logical NOT (`!`) | `!p1.test(x)`
+| **`Predicate.not(p1)`** | Static Logical NOT | `!p1.test(x)` (Useful with method references)
+|===
+
+---
+
+=== Code Example: Direct Usage, Composition, and Collection Filtering
+
+[source,java]
+----
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
+
+class Product {
+    private String name;
+    private double price;
+    private boolean inStock;
+
+    public Product(String name, double price, boolean inStock) {
+        this.name = name;
+        this.price = price;
+        this.inStock = inStock;
+    }
+
+    public String getName() { return name; }
+    public double getPrice() { return price; }
+    public boolean isInStock() { return inStock; }
+
+    @Override
+    public String toString() { return name + " ($" + price + ")"; }
+}
+
+class PredicateInterfaceDemo {
+    public void executeExamples() {
+        List<Product> catalog = new ArrayList<>(List.of(
+            new Product("Laptop", 1200.00, true),
+            new Product("Mouse", 25.00, true),
+            new Product("Monitor", 300.00, false),
+            new Product("Keyboard", 80.00, true)
+        ));
+
+        // 1. Defining Base Predicates
+        Predicate<Product> isAvailable = Product::isInStock;
+        Predicate<Product> isAffordable = p -> p.getPrice() < 100.00;
+
+        // 2. Combining Predicates via and(), or(), and negate()
+        Predicate<Product> buyableDiscountItem = isAvailable.and(isAffordable);
+        Predicate<Product> outOfStockOrExpensive = isAvailable.negate().or(p -> p.getPrice() >= 500.00);
+
+        // 3. Filtering Streams using composed predicates
+        List<Product> budgetOptions = catalog.stream()
+                                             .filter(buyableDiscountItem)
+                                             .collect(Collectors.toList());
+        System.out.println("Budget Available Items: " + budgetOptions);
+
+        // 4. Modifying Collections with Collection.removeIf()
+        catalog.removeIf(Predicate.not(Product::isInStock)); // Removes out-of-stock items
+        System.out.println("Catalog after removing out-of-stock items: " + catalog);
+    }
+}
+----
+
+---
+
+=== Primitive Specialized and Multi-Argument Variations
+
+To avoid performance overhead from auto-boxing `boolean` results and primitives, Java provides specialized variations in `java.util.function`:
+
+[cols="1,2,2", options="header"]
+|===
+| Variant Interface | Method Signature | Primary Use Case
+| **`BiPredicate<T, U>`** | `boolean test(T t, U u)` | Tests a condition requiring **two** input parameters.
+| **`IntPredicate`** | `boolean test(int value)` | Tests primitive `int` values directly without auto-boxing.
+| **`LongPredicate`** | `boolean test(long value)` | Tests primitive `long` values directly without auto-boxing.
+| **`DoublePredicate`** | `boolean test(double value)` | Tests primitive `double` values directly without auto-boxing.
+|===
+
+== Combining Predicates
+
+The `Predicate<T>` interface provides three built-in default methods and two static methods for building complex logical conditions out of simple, reusable rules: **`and()`**, **`or()`**, **`negate()`**, and **`Predicate.not()`**.
+
+These methods mirror standard Java logical operators (`&&`, `||`, `!`), enabling declarative condition composition.
+
+[cols="1,2,2", options="header"]
+|===
+| Composition Method | Logical Equivalent | Behavior
+| **`p1.and(p2)`** | `p1.test(x) && p2.test(x)` | Evaluates `true` **only if both** predicates pass (short-circuiting).
+| **`p1.or(p2)`** | `p1.test(x) \|\| p2.test(x)` | Evaluates `true` **if either** predicate passes (short-circuiting).
+| **`p1.negate()`** | `!p1.test(x)` | Inverts the boolean result of `p1`.
+| **`Predicate.not(p1)`** | `!p1.test(x)` | Static helper (Java 11+) ideal for negating method references.
+|===
+
+---
+
+=== Quick Code Example
+
+[source,java]
+----
+import java.util.List;
+import java.util.function.Predicate;
+
+class CombinePredicatesDemo {
+    public void runComposition() {
+        List<String> words = List.of("Java", "AsciiDoc", "Stream", "API", "Lambda");
+
+        Predicate<String> startsWithAorJ = s -> s.startsWith("A") || s.startsWith("J");
+        Predicate<String> isLong = s -> s.length() > 4;
+
+        // Combine: Starts with A/J AND length <= 4 (negate isLong)
+        Predicate<String> targetWords = startsWithAorJ.and(isLong.negate());
+
+        words.stream()
+             .filter(targetWords)
+             .forEach(System.out::println); // Outputs: Java
+
+        // Clean negation using Predicate.not with a method reference
+        long emptyCount = words.stream()
+                               .filter(Predicate.not(String::isEmpty))
+                               .count();
+    }
+}
+----
+
+== The `BinaryOperator` Interface
+
+The `BinaryOperator<T>` interface (`java.util.function.BinaryOperator`) is a specialized sub-interface of `BiFunction<T, T, T>`. It represents an operation upon **two operands of the same type `T`**, producing a result of the **exact same type `T`**.
+
+Because all inputs and outputs share identical types, it simplifies method signatures where binary combination logic is required—most notably driving reduction operations like `Stream.reduce()` and mathematical aggregations.
+
+=== The Interface Contract
+
+`BinaryOperator<T>` extends `BiFunction<T, T, T>` and adds two static helper methods for finding minimum and maximum values based on a `Comparator`:
+
+[source,java]
+----
+@FunctionalInterface
+public interface BinaryOperator<T> extends BiFunction<T, T, T> {
+    // Inherits SAM from BiFunction:
+    // R apply(T t, U u) -> specialized as: T apply(T t1, T t2)
+
+    // Static helper: Returns a BinaryOperator that yields the smaller of two elements
+    static <T> BinaryOperator<T> minBy(Comparator<? super T> comparator) {
+        Objects.requireNonNull(comparator);
+        return (a, b) -> comparator.compare(a, b) <= 0 ? a : b;
+    }
+
+    // Static helper: Returns a BinaryOperator that yields the larger of two elements
+    static <T> BinaryOperator<T> maxBy(Comparator<? super T> comparator) {
+        Objects.requireNonNull(comparator);
+        return (a, b) -> comparator.compare(a, b) >= 0 ? a : b;
+    }
+}
+----
+
+---
+
+=== Common Applications in Java
+
+* **Stream Accumulation:** Driving `Stream.reduce(BinaryOperator<T> accumulator)` to combine elements into a single aggregate value (e.g., calculating sums, products, or string concatenation).
+* **Map Merge Operations:** Resolving key collision conflicts in `Map.merge(key, value, remappingFunction)` or `Collectors.toMap()`.
+
+---
+
+=== Code Example: Arithmetic Reductions, Map Merging, and `minBy`/`maxBy`
+
+[source,java]
+----
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.BinaryOperator;
+
+class BinaryOperatorDemo {
+    public void executeExamples() {
+        // 1. Basic Arithmetic Combining
+        BinaryOperator<Integer> add = (a, b) -> a + b;
+        BinaryOperator<String> concat = (s1, s2) -> s1 + " " + s2;
+
+        System.out.println("Addition Result: " + add.apply(15, 25)); // 40
+        System.out.println("Concatenation: " + concat.apply("Hello", "World")); // Hello World
+
+        // 2. Stream Reduction
+        List<Integer> numbers = List.of(1, 2, 3, 4, 5);
+        int sum = numbers.stream()
+                         .reduce(0, add); // Combines numbers pairwise
+        System.out.println("Stream Sum: " + sum); // 15
+
+        // 3. Static Helpers: minBy() and maxBy()
+        Comparator<String> lengthComparator = Comparator.comparingInt(String::length);
+        BinaryOperator<String> shortestWord = BinaryOperator.minBy(lengthComparator);
+        BinaryOperator<String> longestWord = BinaryOperator.maxBy(lengthComparator);
+
+        System.out.println("Shortest: " + shortestWord.apply("AsciiDoc", "Java")); // Java
+        System.out.println("Longest: " + longestWord.apply("AsciiDoc", "Java"));   // AsciiDoc
+
+        // 4. Map Collision Resolution with Map.merge()
+        Map<String, Integer> scores = new HashMap<>();
+        scores.put("Alice", 100);
+
+        // Conflict resolution strategy: Keep the higher score when merging
+        BinaryOperator<Integer> keepHighest = BinaryOperator.maxBy(Integer::compareTo);
+        scores.merge("Alice", 120, keepHighest); // Alice's score updates to 120
+        scores.merge("Bob", 90, keepHighest);    // Bob added with score 90
+
+        System.out.println("Updated Scores: " + scores);
+    }
+}
+----
+
+---
+
+=== Specialized Primitive Variations
+
+To eliminate performance overhead caused by auto-boxing primitive operands, Java provides three specialized primitive versions in `java.util.function`:
+
+[cols="1,2,2", options="header"]
+|===
+| Variant Interface | Method Signature | Primary Use Case
+| **`IntBinaryOperator`** | `int applyAsInt(int left, int right)` | Combining two primitive `int` values (e.g., `IntStream.reduce()`).
+| **`LongBinaryOperator`** | `long applyAsLong(long left, long right)` | Combining two primitive `long` values without auto-boxing.
+| **`DoubleBinaryOperator`** | `double applyAsDouble(double left, double right)` | Combining two primitive `double` values (e.g., calculating running averages).
+|===
+
+== The `UnaryOperator` Interface
+
+The `UnaryOperator<T>` interface (`java.util.function.UnaryOperator`) is a specialized sub-interface of `Function<T, T>`. It represents an operation upon a **single operand of type `T`**, producing a result of the **exact same type `T`**.
+
+Whenever an operation transforms an object without changing its fundamental data type—such as incrementing a number, trimming a string, or applying a state mutation—`UnaryOperator` is preferred over a standard `Function` because it simplifies generic signatures.
+
+=== The Interface Contract
+
+Because `UnaryOperator<T>` extends `Function<T, T>`, its Single Abstract Method (SAM) is inherited directly from `Function`, alongside a static helper method:
+
+[source,java]
+----
+@FunctionalInterface
+public interface UnaryOperator<T> extends Function<T, T> {
+    // Inherits SAM from Function:
+    // R apply(T t) -> specialized as: T apply(T t)
+
+    // Static helper: Returns a UnaryOperator that always returns its input argument
+    static <T> UnaryOperator<T> identity() {
+        return t -> t;
+    }
+}
+----
+
+---
+
+=== Common Applications in Java
+
+* **Collection In-Place Updates:** Used in `List.replaceAll(UnaryOperator<E> operator)` to update every element of a list in-place without creating a new collection.
+* **Stream Operations:** Powers `Stream.iterate(T seed, UnaryOperator<T> f)` to produce infinite sequential ordered streams by applying an operation iteratively to an initial seed value.
+
+---
+
+=== Code Example: Direct Usage, In-Place List Updates, and Stream Iteration
+
+[source,java]
+----
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.UnaryOperator;
+import java.util.stream.Stream;
+
+class UnaryOperatorDemo {
+    public void executeExamples() {
+        // 1. Basic Single-Type Transformation
+        UnaryOperator<String> cleanText = text -> text.trim().toLowerCase();
+        System.out.println("Cleaned: " + cleanText.apply("   Hello Java World!   "));
+        // Output: "hello java world!"
+
+        // 2. Chaining UnaryOperators (Inherited from Function)
+        UnaryOperator<Integer> doubleValue = x -> x * 2;
+        UnaryOperator<Integer> addTen = x -> x + 10;
+
+        // Composes forward: (5 * 2) + 10 = 20
+        System.out.println("Chained Result: " + doubleValue.andThen(addTen).apply(5));
+
+        // 3. In-Place List Modification with List.replaceAll()
+        List<String> codes = new ArrayList<>(List.of("us-east", "eu-west", "ap-south"));
+        codes.replaceAll(String::toUpperCase); // Applies UnaryOperator to every element
+        System.out.println("Transformed List: " + codes); // [US-EAST, EU-WEST, AP-SOUTH]
+
+        // 4. Generating Streams with Stream.iterate()
+        System.out.print("Powers of 2: ");
+        Stream.iterate(1, n -> n * 2) // UnaryOperator computes the next value sequentially
+              .limit(5)
+              .forEach(n -> System.out.print(n + " ")); // 1 2 4 8 16
+        System.out.println();
+    }
+}
+----
+
+---
+
+=== Specialized Primitive Variations
+
+To avoid performance penalties caused by auto-boxing primitive operands, Java provides three unboxed primitive versions in `java.util.function`:
+
+[cols="1,2,2", options="header"]
+|===
+| Variant Interface | Method Signature | Primary Use Case
+| **`IntUnaryOperator`** | `int applyAsInt(int operand)` | Modifying primitive `int` values (e.g., bit shifts, increments).
+| **`LongUnaryOperator`** | `long applyAsLong(long operand)` | Modifying primitive `long` values (e.g., sequence counters).
+| **`DoubleUnaryOperator`** | `double applyAsDouble(double operand)` | Modifying primitive `double` values (e.g., applying mathematical formulas).
+|===

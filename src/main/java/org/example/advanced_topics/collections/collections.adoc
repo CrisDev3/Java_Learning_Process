@@ -1,0 +1,822 @@
+== Overview of the Java Collections Framework
+
+The **Java Collections Framework (JCF)** is a unified architecture designed to store, manipulate, and manage groups of objects efficiently. Before the framework was introduced in Java 1.2, developers had to rely on disparate, non-standardized data structures like arrays, `Vector`, and `Hashtable`—each having completely different API methods for data retrieval and storage.
+
+=== Core Advantages of JCF
+* **Reduces Programming Effort:** Provides high-performance, battle-tested data structures out-of-the-box so you don't have to write your own linked lists or hash tables.
+* **Increases Performance:** Built-in implementations are highly optimized for speed and memory efficiency.
+* **Interoperability:** Establishes a common language/API interface across different libraries and structural components.
+
+---
+
+=== The Collections Framework Hierarchy
+
+The framework splits neatly into two distinct structural trees: the `Collection` interface hierarchy (for single elements) and the `Map` interface hierarchy (for Key-Value pairs).
+
+
+
+==== 1. The `Collection` Interface Hierarchy
+The root interface of the primary tree branch. It defines the universal behaviors (like `.add()`, `.remove()`, `.size()`, and `.clear()`) that all sequence-based data structures share.
+
+* **`List` (Ordered Contract):** An ordered sequence of elements that allows duplicate values. Elements are indexed via positional integers.
+** *Key Implementations:* `ArrayList` (backed by a dynamic array), `LinkedList` (doubly-linked nodes).
+* **`Set` (Uniqueness Contract):** A collection that strictly forbids duplicate elements. Models the mathematical set abstraction.
+** *Key Implementations:* `HashSet` (backed by a hash table), `TreeSet` (sorted tree structural implementation).
+* **`Queue` / `Deque` (Processing Contract):** Designed for holding elements prior to processing, typically adhering to First-In-First-Out (FIFO) or Last-In-First-Out (LIFO) order mechanics.
+** *Key Implementations:* `PriorityQueue`, `ArrayDeque`.
+
+==== 2. The `Map` Interface Hierarchy
+The `Map` interface stands independently and does **not** extend the `Collection` interface. It models a mathematical function mapping unique keys to data values.
+
+* **Behavior:** Every key inside a map must be completely unique, and each key maps to exactly one value.
+* **Key Implementations:** `HashMap` (unordered, based on hashing algorithms), `TreeMap` (keys sorted in natural order or via a custom `Comparator`).
+
+== The Need for Iterators and the `Iterable` Interface
+
+Before Java 5, traversing different data structures required using completely different loop styles. Iterating over a standard array used an integer index, while iterating over a collection required managing an explicit `Iterator` object.
+
+This approach lacked uniformity. If you decided to change your data layer from an array to a custom tree or linked data structure, you were forced to completely rewrite all of your loops.
+
+=== The Solution: The `Iterable` Interface
+
+The `Iterable<T>` interface solves this problem by providing a **unified traversal contract**. It is the absolute parent interface of the entire `Collection` framework branch (`List`, `Set`, and `Queue` all inherit from it).
+
+Any class that implements `Iterable<T>` announces to the Java compiler that its contents can be stepped through sequentially.
+
+
+
+=== What `Iterable` Powers: The Enhanced For-Loop (For-Each)
+
+The primary reason `Iterable` is so crucial in modern Java is that **it is the underlying engine behind the enhanced for-loop (for-each)**.
+
+You cannot use the for-each syntax on an object unless that object implements `Iterable`. Under the hood, the compiler transforms your clean for-each loop into a traditional `Iterator` pattern loop.
+
+=== Code Example: The Transition of Iteration Patterns
+
+==== Traditional `Iterator` Approach (What happens under the hood)
+[source,java]
+----
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+
+class TraditionalIterationDemo {
+    public void run() {
+        List<String> frameworks = new ArrayList<>();
+        frameworks.add("Spring");
+        frameworks.add("Quarkus");
+
+        // Step 1: Manually request the Iterator contract object
+        Iterator<String> iterator = frameworks.iterator();
+
+        // Step 2: Manually drive the sequential loop state
+        while (iterator.hasNext()) {
+            String framework = iterator.next();
+            System.out.println("Processing: " + framework);
+        }
+    }
+}
+----
+
+==== Modern Enhanced For-Loop Approach (Polymorphic Unified Traversal)
+[source,java]
+----
+import java.util.ArrayList;
+import java.util.List;
+
+class ModernIterationDemo {
+    public void run() {
+        List<String> frameworks = new ArrayList<>();
+        frameworks.add("Spring");
+        frameworks.add("Quarkus");
+
+        // Clean, readable, and unified.
+        // This syntax works identically for ANY structure implementing Iterable.
+        for (String framework : frameworks) {
+            System.out.println("Processing: " + framework);
+        }
+    }
+}
+----
+
+---
+
+=== Core Difference: `Iterable` vs `Iterator`
+
+It is easy to confuse these two closely named components, but they have completely distinct architectural roles:
+
+[cols="1,2,2", options="header"]
+|===
+| Interface | `java.lang.Iterable` | `java.util.Iterator`
+| **Role** | The **Factory** contract. | The **Worker** contract.
+| **Meaning** | Declares: *"My object can be iterated over."* | Declares: *"I am the object doing the actual tracking."*
+| **Core Method** | `Iterator<T> iterator();` | `boolean hasNext();` and `E next();`
+| **Analogy** | A book (it can be read, and provides a bookmark). | The bookmark itself (keeps track of the exact page you are currently on).
+|===
+
+== `Collection` Interface vs. `Collections` Utility Class
+
+A very common source of confusion in Java development is distinguishing between the lowercase **`Collection` interface** and the pluralized **`Collections` utility class**. Although they sound almost identical, they play completely different roles in software design.
+
+
+
+=== 1. The `Collection` Interface (`java.util.Collection`)
+
+The `Collection` interface is a **structural contract**. It sits at the top of the collections hierarchy (right beneath `Iterable`) and defines the core behavior that all standard single-element data structures must implement.
+
+* **Type:** Interface
+* **Purpose:** Defines the data structure blueprint. It dictates *what* operations a concrete group of elements (like a `List` or a `Set`) can perform (e.g., adding, removing, or checking the size).
+* **Examples of Sub-interfaces:** `List`, `Set`, `Queue`.
+
+=== 2. The `Collections` Utility Class (`java.util.Collections`)
+
+The `Collections` class is an **operational toolkit**. It is a utility class consisting exclusively of **static methods** that operate on or return collections.
+
+* **Type:** Concrete Class (with a private constructor, so it cannot be instantiated).
+* **Purpose:** Provides powerful, pre-built algorithms to manipulate data structures—such as sorting, searching, reversing, and making collections thread-safe.
+
+---
+
+=== Side-by-Side Comparison Matrix
+
+[cols="1,2,2", options="header"]
+|===
+| Feature | `Collection` (Interface) | `Collections` (Class)
+| **What is it?** | A root interface of the framework hierarchy. | A utility class containing static helper methods.
+| **Instantiation** | Cannot be instantiated directly (implemented by classes like `ArrayList`). | Cannot be instantiated at all (used directly via class name).
+| **Core Purpose** | To provide a standard contract for data storage types. | To provide algorithms/operations to manipulate existing data.
+| **Key Methods** | `.add()`, `.remove()`, `.clear()`, `.size()`, `.isEmpty()` | `.sort()`, `.reverse()`, `.shuffle()`, `.max()`, `.min()`
+|===
+
+---
+
+=== Code Example: Putting Both to Work
+
+[source,java]
+----
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+
+class CollectionVsCollectionsDemo {
+    public void executeDemonstration() {
+        // 1. Using the 'Collection' interface as a polymorphic type reference
+        // (ArrayList implements List, which extends Collection)
+        Collection<Integer> numberCollection = new ArrayList<>();
+        numberCollection.add(45);
+        numberCollection.add(12);
+        numberCollection.add(89);
+        numberCollection.add(3);
+
+        System.out.println("Initial collection size: " + numberCollection.size());
+
+        // 2. Using the 'Collections' utility class to manipulate the collection
+        // Note: Algorithms like sort() require random access, so we cast/reference it as a List
+        List<Integer> numberList = (List<Integer>) numberCollection;
+
+        System.out.println("Before sorting: " + numberList);
+
+        // Invoking static helper methods from the Collections class
+        Collections.sort(numberList);
+        System.out.println("After sorting: " + numberList);
+
+        Collections.reverse(numberList);
+        System.out.println("After reversing: " + numberList);
+
+        int maxVal = Collections.max(numberList);
+        System.out.println("Maximum value found: " + maxVal);
+    }
+}
+----
+
+== The `List` Interface
+
+The `List` interface extends the `Collection` interface and represents an **ordered collection** (also known as a **sequence**). It introduces precise control over where each element is inserted within the collection.
+
+
+
+=== Key Contracts of a List
+
+1. **Positional Access (Index-Based):** Elements are assigned a zero-based integer index, exactly like standard arrays. You can insert, retrieve, update, and remove elements directly using their index position.
+2. **Allows Duplicates:** Unlike a `Set`, a `List` can contain completely identical elements at multiple different index positions.
+3. **Preserves Insertion Order:** The collection guarantees that elements will remain in the exact order they were inserted unless manually sorted or rearranged.
+
+---
+
+=== Core Implementations Compared
+
+While there are several implementations, the two most frequently used are `ArrayList` and `LinkedList`. Choosing between them depends entirely on your performance requirements:
+
+[cols="1,2,2", options="header"]
+|===
+| Operation | `ArrayList` (Dynamic Array) | `LinkedList` (Doubly-Linked List)
+| **Underlying Structure** | Resizable array. | Sequence of nodes containing data and pointers.
+| **Get by Index (`.get(i)`)** | **O(1) - Instant.** Direct memory lookup. | **O(n) - Slow.** Must traverse nodes sequentially from the start or end.
+| **Add / Remove (At End)** | **O(1) Amortized.** Fast, except when the array must resize. | **O(1) - Instant.** Updates tail pointer references.
+| **Add / Remove (Middle)** | **O(n) - Slow.** Must shift all subsequent elements in memory. | **O(1) - Fast.** Updates neighboring node references (finding position takes O(n)).
+| **Memory Footprint** | Low. Fits tightly in contiguous memory. | Higher. Every node incurs structural overhead for pointers.
+|===
+
+---
+
+=== Code Example: Working with List Operations
+
+[source,java]
+----
+import java.util.ArrayList;
+import java.util.LinkedList;
+import java.util.List;
+
+class ListInterfaceDemo {
+    public void demonstrateListOperations() {
+        // Using Polymorphism: Declaring the interface, instantiating the concrete class
+        List<String> dynamicList = new ArrayList<>();
+
+        // 1. Appending elements (Insertion Order preserved)
+        dynamicList.add("Apple");
+        dynamicList.add("Banana");
+        dynamicList.add("Apple"); // Duplicates allowed
+
+        // 2. Positional Access and Manipulation
+        dynamicList.add(1, "Orange"); // Inserts "Orange" at index 1, shifting others right
+        String secondItem = dynamicList.get(2); // Retrieves "Banana"
+
+        System.out.println("Current List: " + dynamicList);
+        System.out.println("Item at index 2: " + secondItem);
+
+        // 3. Iterating with Index Control
+        // The List interface allows traditional index-based loops that standard Sets cannot do
+        for (int i = 0; i < dynamicList.size(); i++) {
+            System.out.println("Index " + i + ": " + dynamicList.get(i));
+        }
+
+        // 4. Using LinkedList for specific queue/stack structures
+        // LinkedList implements List AND Deque, making it flexible for head/tail manipulations
+        LinkedList<String> linkedList = new LinkedList<>(dynamicList);
+        linkedList.addFirst("Strawberry"); // Seamless head insertion
+        linkedList.addLast("Watermelon");  // Seamless tail insertion
+
+        System.out.println("LinkedList specific boundaries: " + linkedList);
+    }
+}
+----
+
+== The `Comparable` Interface
+
+The `Comparable` interface (`java.lang.Comparable`) is used to define the **natural ordering** of custom objects. When a class implements `Comparable`, it gains the ability to compare its instances with each other, enabling collections of these objects to be sorted automatically by tools like `Collections.sort()` or `Arrays.sort()`.
+
+Many core Java classes—such as `String`, `Integer`, and `Date`—already implement `Comparable` under the hood to ensure standard sorting logic works right out of the box.
+
+---
+
+=== The Interface Contract
+
+The interface contains a single method that must be overridden:
+
+[source,java]
+----
+public interface Comparable<T> {
+    public int compareTo(T o);
+}
+----
+
+==== Understanding the Return Values of `compareTo`
+The `compareTo` method compares the current object (`this`) with the object passed as an argument (`o`). It must return an integer value whose sign communicates the ordering relationship:
+
+[cols="1,2,3", options="header"]
+|===
+| Return Value | Relationship | Sorting Outcome
+| **Negative Integer** (`< 0`) | `this` is less than `o` | `this` will be ordered **before** `o`.
+| **Zero** (`== 0`) | `this` is equal to `o` | No change in relative ordering.
+| **Positive Integer** (`> 0`) | `this` is greater than `o` | `this` will be ordered **after** `o`.
+|===
+
+---
+
+=== Code Example: Implementing Custom Natural Ordering
+
+[source,java]
+----
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+// We specify <Product> to ensure type-safe comparisons at compile time
+class Product implements Comparable<Product> {
+    private String name;
+    private double price;
+
+    public Product(String name, double price) {
+        this.name = name;
+        this.price = price;
+    }
+
+    public String getName() { return name; }
+    public double getPrice() { return price; }
+
+    @Override
+    public int compareTo(Product other) {
+        // Objective: Sort products naturally by price in ascending order
+
+        // Strategy A: Traditional conditional checks
+        if (this.price < other.price) return -1;
+        if (this.price > other.price) return 1;
+        return 0;
+
+        // Strategy B: Modern utility shortcut alternative
+        // return Double.compare(this.price, other.price);
+    }
+
+    @Override
+    public String toString() {
+        return name + " ($" + price + ")";
+    }
+}
+
+class ComparableDemo {
+    public void runSortingExample() {
+        List<Product> catalog = new ArrayList<>();
+        catalog.add(new Product("Laptop", 999.99));
+        catalog.add(new Product("Mouse", 25.50));
+        catalog.add(new Product("Keyboard", 75.00));
+
+        System.out.println("Before Sorting: " + catalog);
+
+        // Collections.sort() compiles seamlessly because Product implements Comparable
+        Collections.sort(catalog);
+
+        System.out.println("After Natural Sorting (Price Ascending): " + catalog);
+    }
+}
+----
+
+---
+
+=== Important Limitations of `Comparable`
+
+* **Single Sorting Strategy:** You can only define **one** natural sorting logic inside a class. If you naturally sort your `Product` class by `price`, you cannot easily sort it by `name` using `Comparable` later.
+* **Modification Requirement:** You must have direct modification access to the source code of the class to implement the interface. You cannot add `Comparable` to a final class imported from a third-party library.
+
+*(Note: To solve these limitations, Java provides the companion `Comparator` interface for custom, ad-hoc sorting rules.)*
+
+== The `Comparator` Interface
+
+The `Comparator` interface (`java.util.Comparator`) is used to define **external, customized sorting strategies**. Unlike `Comparable`—which builds a single "natural" sorting behavior right inside the class definition—a `Comparator` acts as a separate, ad-hoc rulebook that you pass to sorting methods on demand.
+
+This interface provides total flexibility, allowing you to sort a single collection in multiple different ways (e.g., sorting users by age, then by name, then by registration date) without modifying the target class's source code.
+
+---
+
+=== The Interface Contract
+
+The functional interface requires overriding a single abstract method that compares two external objects:
+
+[source,java]
+----
+@FunctionalInterface
+public interface Comparator<T> {
+    int compare(T o1, T o2);
+}
+----
+
+==== Return Value Rules for `compare(o1, o2)`
+The evaluation behavior matches `compareTo` but handles two distinct parameters instead of using the `this` reference:
+
+[cols="1,2,3", options="header"]
+|===
+| Return Value | Relationship | Sorting Outcome
+| **Negative Integer** (`< 0`) | `o1` is less than `o2` | `o1` will be ordered **before** `o2`.
+| **Zero** (`== 0`) | `o1` is equal to `o2` | No change in relative ordering.
+| **Positive Integer** (`> 0`) | `o1` is greater than `o2` | `o1` will be ordered **after** `o2`.
+|===
+
+---
+
+=== Code Example: Implementing Multiple Sorting Rules
+
+[source,java]
+----
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+
+// Notice the target class does NOT need to implement Comparable or be modified
+class Car {
+    private String model;
+    private int topSpeed;
+
+    public Car(String model, int topSpeed) {
+        this.model = model;
+        this.topSpeed = topSpeed;
+    }
+
+    public String getModel() { return model; }
+    public int getTopSpeed() { return topSpeed; }
+
+    @Override
+    public String toString() { return model + " (" + topSpeed + " mph)"; }
+}
+
+class ComparatorDemo {
+    public void runSortingStrategies() {
+        List<Car> showroom = new ArrayList<>();
+        showroom.add(new Car("Phantom", 155));
+        showroom.add(new Car("Aventador", 217));
+        showroom.add(new Car("Chiron", 261));
+
+        System.out.println("Original Showroom: " + showroom);
+
+        // Strategy A: Traditional Class Implementation (Sorting by Top Speed Descending)
+        class SpeedComparator implements Comparator<Car> {
+            @Override
+            public int compare(Car c1, Car c2) {
+                return Integer.compare(c2.getTopSpeed(), c1.getTopSpeed());
+            }
+        }
+        Collections.sort(showroom, new SpeedComparator());
+        System.out.println("Sorted by Speed (Fastest First): " + showroom);
+
+        // Strategy B: Modern Lambda Expression (Sorting by Model Name Alphabetically)
+        Collections.sort(showroom, (car1, car2) -> car1.getModel().compareTo(car2.getModel()));
+        System.out.println("Sorted by Model Name (A-Z): " + showroom);
+
+        // Strategy C: Modern Composition Utility (Sorting by Speed Ascending)
+        showroom.sort(Comparator.comparingInt(Car::getTopSpeed));
+        System.out.println("Sorted by Speed (Slowest First): " + showroom);
+    }
+}
+----
+
+---
+
+=== Summary Matrix: `Comparable` vs. `Comparator`
+
+[cols="1,2,2", options="header"]
+|===
+| Feature | `Comparable` | `Comparator`
+| **Package Location** | `java.lang` | `java.util`
+| **Sorting Intent** | Defines the *natural default ordering* for a class. | Defines *custom, alternative sorting* strategies.
+| **Class Modification** | Must modify the original class source code. | Entirely external; can sort classes you cannot edit.
+| **Method to Implement** | `int compareTo(T o)` | `int compare(T o1, T o2)`
+| **Argument Count** | Takes **1** argument (compares `this` to `o`). | Takes **2** arguments (compares `o1` to `o2`).
+| **Usage Pattern** | `Collections.sort(list);` | `Collections.sort(list, customComparator);`
+|===
+
+== The `Queue` Interface
+
+The `Queue` interface (`java.util.Queue`) extends `Collection` and is designed to hold elements prior to processing. Beyond basic collection operations, queues provide specific staging behaviors, typically ordering elements in a **FIFO (First-In-First-Out)** sequence—where elements are inserted at the tail (end) and removed from the head (beginning).
+
+
+
+=== The Two Sets of Methods
+
+The `Queue` interface is unique because it features two distinct sets of methods for inserting, removing, and inspecting elements. One set throws an exception if the operation fails, while the other returns a special value (like `null` or `false`).
+
+[cols="1,2,2", options="header"]
+|===
+| Operation Type | Throws Exception (on failure) | Returns Special Value (on failure)
+| **Insert (Tail)** | `add(e)` (Throws `IllegalStateException` if full) | `offer(e)` (Returns `false` if full)
+| **Remove (Head)** | `remove()` (Throws `NoSuchElementException` if empty) | `poll()` (Returns `null` if empty)
+| **Examine (Head)** | `element()` (Throws `NoSuchElementException` if empty) | `peek()` (Returns `null` if empty)
+|===
+
+* **Design Rule of Thumb:** In capacity-restricted queues, prefer using `offer`, `poll`, and `peek` to handle bounds gracefully without relying on exception try-catch blocks.
+
+---
+
+=== Common Core Implementations
+
+* **`LinkedList`:** A standard FIFO queue implementation. Since it implements both `List` and `Queue`, it offers flexible manipulation but imposes pointer memory overhead.
+* **`PriorityQueue`:** An unbounded queue where elements are processed based on their **natural ordering** (via `Comparable`) or a custom **`Comparator`**, rather than their insertion order. The element at the head is always the smallest/highest-priority element.
+* **`ArrayDeque`:** A resizable-array implementation of the `Deque` (Double-Ended Queue) interface. It can add and remove elements from both ends efficiently, making it the modern default choice for standard FIFO queues and LIFO stacks over `Stack` or `LinkedList`.
+
+---
+
+=== Code Example: FIFO vs. Priority Queue Behavior
+
+[source,java]
+----
+import java.util.ArrayDeque;
+import java.util.LinkedList;
+import java.util.PriorityQueue;
+import java.util.Queue;
+
+class QueueInterfaceDemo {
+    public void runQueueComparison() {
+        // 1. Standard FIFO Queue using ArrayDeque
+        Queue<String> line = new ArrayDeque<>();
+
+        line.offer("Alice");
+        line.offer("Bob");
+        line.offer("Charlie");
+
+        System.out.println("Initial FIFO Queue: " + line);
+
+        // Inspecting the front of the line
+        System.out.println("Next in line (peek): " + line.peek());
+
+        // Processing elements sequentially (FIFO)
+        while (!line.isEmpty()) {
+            System.out.println("Served: " + line.poll());
+        }
+
+        // 2. Priority Queue (Sorted dynamic extraction)
+        Queue<Integer> numbers = new PriorityQueue<>();
+
+        numbers.offer(45);
+        numbers.offer(12);
+        numbers.offer(89);
+        numbers.offer(3);
+
+        System.out.println("\nPriority Queue internal representation: " + numbers);
+
+        // Processing elements sequentially (Always extracts the smallest element first)
+        while (!numbers.isEmpty()) {
+            System.out.println("Extracted Priority Item: " + numbers.poll());
+        }
+    }
+}
+----
+
+== The `Set` Interface
+
+The `Set` interface (`java.util.Set`) extends `Collection` and represents a collection that **strictly contains no duplicate elements**. It models the mathematical set abstraction. Unlike a `List`, a `Set` does not provide index-based positional access, meaning you cannot reliably ask a set for the item at "index 2".
+
+=== Key Contracts of a Set
+
+1. **Uniqueness Enforced:** If you attempt to add an element that is already present, the `.add()` method returns `false` and leaves the set completely unchanged.
+2. **The `hashCode()` and `equals()` Dependency:** To accurately check for duplicates, a `Set` relies heavily on the elements' implementations of `equals()` and `hashCode()`. Custom classes must override both correctly to work reliably within a set.
+
+---
+
+=== Core Implementations Compared
+
+The three primary implementations differ significantly in how they maintain internal data structures and iteration ordering:
+
+[cols="1,2,2,2", options="header"]
+|===
+| Characteristic | `HashSet` | `LinkedHashSet` | `TreeSet`
+| **Underlying Structure** | Hash table (`HashMap` instance). | Hash table combined with a linked list. | Red-Black Tree (`TreeMap` instance).
+| **Iteration Order** | **Unordered.** Completely unpredictable. | **Insertion Order.** Tracks order of items added. | **Sorted Order.** Natural ordering or custom `Comparator`.
+| **Performance** | **O(1)** for add, remove, and contains. | **O(1)** for add, remove, and contains (slightly higher node overhead). | **O(log n)** due to tree balancing search operations.
+| **Null Elements** | Allows a single `null` element. | Allows a single `null` element. | **No nulls allowed** (throws `NullPointerException` during comparison).
+|===
+
+---
+
+=== Code Example: Enforcing Uniqueness and Sorting Mechanics
+
+[source,java]
+----
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.Set;
+import java.util.TreeSet;
+
+class SetInterfaceDemo {
+    public void runSetComparison() {
+        // 1. HashSet: Maximum performance, order is ignored
+        Set<String> hashSet = new HashSet<>();
+        hashSet.add("Banana");
+        hashSet.add("Apple");
+        hashSet.add("Orange");
+        boolean wasAdded = hashSet.add("Apple"); // Attempting to add a duplicate
+
+        System.out.println("HashSet Duplicate Accepted? " + wasAdded); // false
+        System.out.println("HashSet Content (Unordered): " + hashSet);
+
+        // 2. LinkedHashSet: Remembers the sequence of entry insertions
+        Set<String> linkedHashSet = new LinkedHashSet<>();
+        linkedHashSet.add("Banana");
+        linkedHashSet.add("Apple");
+        linkedHashSet.add("Orange");
+        System.out.println("LinkedHashSet Content (Insertion Order): " + linkedHashSet);
+
+        // 3. TreeSet: Automatically balances and sorts elements
+        Set<String> treeSet = new TreeSet<>();
+        treeSet.add("Banana");
+        treeSet.add("Apple");
+        treeSet.add("Orange");
+        System.out.println("TreeSet Content (Alphabetical/Natural Order): " + treeSet);
+    }
+}
+----
+
+---
+
+=== Common Mathematical Set Operations
+
+The `Collection` interface methods naturally map to classic mathematical set operations when invoked on `Set` instances:
+
+[cols="1,2,2", options="header"]
+|===
+| Mathematical Concept | Java Set Method | Behavior
+| **Union** | `setA.addAll(setB);` | Combines both sets, removing duplicates.
+| **Intersection** | `setA.retainAll(setB);` | Keeps only elements present in *both* sets.
+| **Difference** | `setA.removeAll(setB);` | Removes all elements of `setB` from `setA`.
+|===
+
+== Under the Hood: How Hash Tables Work
+
+A **Hash Table** is a data structure used to implement associative arrays, maps, and sets. It offers incredibly fast performance—averaging **O(1) time complexity** for insertions, lookups, and deletions.
+
+To achieve this speed, it relies on converting a complex data key into an integer index using an architectural mechanism known as **hashing**.
+
+
+
+=== The Three Core Mechanics
+
+==== 1. The Hash Function (`hashCode()`)
+When you place a key-value pair into a hash table, the data structure calls the key's `hashCode()` method. This function processes the internal data properties of the key object and compresses them into a single 32-bit signed integer.
+
+==== 2. Bucket Index Calculation (The Compress Function)
+The raw hash code integer is typically much larger than the actual size of the underlying physical storage array (the table's **buckets**). The hash table uses a modulo bitwise compression operation to safely map that hash integer to a valid bucket index:
+[source,text]
+----
+Index = Math.abs(key.hashCode()) % bucketArray.length
+----
+
+==== 3. Managing Collisions
+Because there are infinite possible object values but a finite number of array buckets, two completely different keys will eventually produce the exact same bucket index. This event is called a **Hash Collision**.
+
+Java handles collisions using a technique called **Separate Chaining**. Instead of storing raw values directly in the array slots, each bucket contains a reference to a linked sequence of elements sharing that index footprint.
+
+---
+
+=== Critical Performance Tuners: Initial Capacity and Load Factor
+
+The performance of a hash table degrades significantly if the array runs out of empty space, causing collision chains to grow longer. Java manages this automatically using two tunable structural parameters:
+
+* **Initial Capacity:** The number of storage buckets allocated in memory when the table is first created (Default is `16`).
+* **Load Factor:** A measure of how full the hash table is allowed to get before it automatically resizes itself (Default is `0.75` or 75% capacity).
+
+> **The Rehash Event:** Once the number of elements exceeds `Capacity * LoadFactor`, the hash table automatically doubles its bucket array length and **rehashes** every single existing key to map them to their brand new index assignments.
+
+---
+
+=== Conceptual Code Simulation: Inside a Basic Hash Table Engine
+
+[source,java]
+----
+import java.util.LinkedList;
+
+class SimpleHashTableEntry<K, V> {
+    final K key;
+    V value;
+
+    SimpleHashTableEntry(K key, V value) {
+        this.key = key;
+        this.value = value;
+    }
+}
+
+class MicroHashTable<K, V> {
+    // Array of LinkedLists to hold chained node entries (Separate Chaining)
+    private LinkedList<SimpleHashTableEntry<K, V>>[] buckets;
+    private int capacity = 16;
+
+    @SuppressWarnings("unchecked")
+    public MicroHashTable() {
+        buckets = new LinkedList[capacity];
+    }
+
+    private int getBucketIndex(K key) {
+        if (key == null) return 0; // Null keys sit consistently at index 0
+        return Math.abs(key.hashCode()) % capacity;
+    }
+
+    public void put(K key, V value) {
+        int index = getBucketIndex(key);
+
+        if (buckets[index] == null) {
+            buckets[index] = new LinkedList<>();
+        }
+
+        // Check if key already exists to update its value
+        for (SimpleHashTableEntry<K, V> entry : buckets[index]) {
+            if (entry.key.equals(key)) {
+                entry.value = value; // Key match found: Update value
+                return;
+            }
+        }
+
+        // No match found: Append a fresh entry to the collision chain
+        buckets[index].add(new SimpleHashTableEntry<>(key, value));
+    }
+
+    public V get(K key) {
+        int index = getBucketIndex(key);
+        LinkedList<SimpleHashTableEntry<K, V>> chain = buckets[index];
+
+        if (chain != null) {
+            for (SimpleHashTableEntry<K, V> entry : chain) {
+                // Relies heavily on working equals() implementation
+                if (entry.key.equals(key)) {
+                    return entry.value; // Match found: return value
+                }
+            }
+        }
+        return null; // Key does not exist
+    }
+}
+----
+
+== The `Map` Interface
+
+The `Map` interface (`java.util.Map`) stands independently within the framework and does **not** extend the `Collection` interface. It models an associative mathematical abstraction that links unique identifiers called **Keys** to data properties called **Values**.
+
+=== Core Constraints of a Map
+
+1. **Unique Keys Only:** A map can never contain duplicate keys. If you attempt to insert an existing key with a brand new value, the old value is overwritten and replaced.
+2. **Value Duplicates Allowed:** While keys must be entirely unique, multiple distinct keys are free to point to identical value objects.
+3. **The `Map.Entry` Nested View:** Internally, a map stores data as a collection of `Map.Entry<K, V>` objects—a small nested interface representing a single, unified key-value pairing.
+
+---
+
+=== Core Implementations Compared
+
+Choosing an implementation dictates how your data structure manages performance, lookup constraints, and structural ordering:
+
+[cols="1,2,2,2", options="header"]
+|===
+| Characteristic | `HashMap` | `LinkedHashMap` | `TreeMap`
+| **Internal Engine** | Hash Table. | Hash Table + Doubly-Linked List. | Red-Black Balanced Tree.
+| **Key Ordering** | **Unordered.** Completely unpredictable. | **Insertion Order.** Tracks entry input sequences. | **Sorted Order.** Natural order or custom `Comparator`.
+| **Lookup Performance** | **O(1)** average search time. | **O(1)** search time (higher memory footprint). | **O(log n)** lookup overhead due to node balancing.
+| **Null Constraints** | Permits one `null` key and multiple `null` values. | Permits one `null` key and multiple `null` values. | **No null keys permitted** (throws `NullPointerException`).
+|===
+
+---
+
+=== Code Example: Working with Map Implementations
+
+[source,java]
+----
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.TreeMap;
+
+class MapInterfaceDemo {
+    public void demonstrateMapBehaviors() {
+        // 1. HashMap: Speed prioritized, sorting order entirely ignored
+        Map<String, Integer> inventory = new HashMap<>();
+        inventory.put("Widget A", 50);
+        inventory.put("Widget B", 120);
+        Integer oldVal = inventory.put("Widget A", 75); // Overwrites "Widget A", returns original value (50)
+
+        System.out.println("HashMap Content (Unordered): " + inventory);
+
+        // 2. LinkedHashMap: Retains the precise sequence of operations
+        Map<String, Integer> historicalMap = new LinkedHashMap<>();
+        historicalMap.put("Zeta", 9);
+        historicalMap.put("Alpha", 1);
+        historicalMap.put("Beta", 5);
+        System.out.println("LinkedHashMap Content (Insertion Order): " + historicalMap);
+
+        // 3. TreeMap: Automatically arranges keys in lexicographical/natural alignment
+        Map<String, Integer> sortedMap = new TreeMap<>();
+        sortedMap.put("Zeta", 9);
+        sortedMap.put("Alpha", 1);
+        sortedMap.put("Beta", 5);
+        System.out.println("TreeMap Content (Keys Sorted Alphabetically): " + sortedMap);
+    }
+}
+----
+
+---
+
+=== The Three Ways to Extract/View Map Elements
+
+Maps do not implement `Iterable` directly, so you cannot pass a raw map container straight into an enhanced for-loop. Instead, you must request one of three specialized collections views:
+
+[source,java]
+----
+import java.util.HashMap;
+import java.util.Map;
+
+class MapTraversalDemo {
+    public void runTraversal() {
+        Map<String, String> CountryCodes = new HashMap<>();
+        CountryCodes.put("US", "United States");
+        CountryCodes.put("DE", "Germany");
+
+        // View A: Iterating through the key set (.keySet())
+        for (String key : CountryCodes.keySet()) {
+            System.out.println("Key: " + key);
+        }
+
+        // View B: Iterating through the values set (.values())
+        for (String value : CountryCodes.values()) {
+            System.out.println("Value: " + value);
+        }
+
+        // View C: Iterating via full Key-Value Entries (.entrySet()) -> Most Efficient
+        for (Map.Entry<String, String> entry : CountryCodes.entrySet()) {
+            System.out.println(entry.getKey() + " maps straight to " + entry.getValue());
+        }
+    }
+}
+----
