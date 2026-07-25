@@ -1,0 +1,675 @@
+== Imperative vs. Functional Programming
+
+Java historically relied almost exclusively on the **Imperative Programming** paradigm. Starting in Java 8, the introduction of lambdas, functional interfaces, and the Stream API enabled a **Functional (Declarative)** approach.
+
+The distinction comes down to **how** you express program logic:
+
+<Image src="image_agent_tag_16235489728551720272" alt="Diagram comparing imperative step-by-step state mutability with functional declarative data transformation flow" caption="Imperative (How) vs. Functional (What) Paradigm Architecture" />
+
+[cols="1,2,2", options="header"]
+|===
+| Dimension | Imperative Programming | Functional Programming
+| **Core Focus** | **How** to achieve the result (explicit step-by-step state changes). | **What** result is desired (declarative data transformations).
+| **State Management** | Relies on **mutable state** and variable reassignment. | Emphasizes **immutability** and side-effect-free evaluations.
+| **Control Flow** | Uses explicit loops (`for`, `while`) and conditional blocks. | Uses higher-order functions (`filter`, `map`, `reduce`).
+| **Readability** | Verbose with heavy boilerplate code. | Concise, readable pipeline syntax.
+| **Concurrency** | Requires manual locking/synchronization due to shared mutable state. | Inherently safer for concurrent execution (thread-safe by default).
+|===
+
+---
+
+=== Side-by-Side Code Comparison
+
+Consider filtering a list of numbers to keep only even numbers, squaring them, and collecting the sum:
+
+[source,java]
+----
+import java.util.List;
+
+class ParadigmComparison {
+    private static final List<Integer> NUMBERS = List.of(1, 2, 3, 4, 5, 6);
+
+    // 1. Imperative Approach (Focuses on explicit iteration & mutable state)
+    public int calculateImperative() {
+        int sum = 0; // Mutable state
+        for (int i = 0; i < NUMBERS.size(); i++) { // Explicit loop mechanics
+            int num = NUMBERS.get(i);
+            if (num % 2 == 0) { // Explicit conditional check
+                sum += num * num; // Mutating state in-place
+            }
+        }
+        return sum;
+    }
+
+    // 2. Functional Approach (Focuses on declarative transformation pipelines)
+    public int calculateFunctional() {
+        return NUMBERS.stream()
+                      .filter(n -> n % 2 == 0) // Declarative filter check
+                      .mapToInt(n -> n * n)    // Declarative transformation
+                      .sum();                  // Terminal reduction
+    }
+}
+----
+
+== The Java Stream API
+
+Introduced in Java 8, the **Stream API** (`java.util.stream`) revolutionized how collections and sequences of data are processed. A **Stream** represents a sequence of elements supporting sequential and parallel aggregate operations.
+
+Unlike a data structure (like a `List` or `Set`), a Stream **does not store data**. Instead, it acts as a computational pipeline that moves elements from a source through a series of declarative transformations.
+
+=== Core Characteristics of Streams
+
+1. **No Data Storage:** Streams process elements from an underlying source (collections, arrays, or I/O channels) on demand.
+2. **Functional in Nature:** Operations on a stream produce a result without modifying the original data source (immutability).
+3. **Lazy Execution:** Intermediate operations are evaluated **only when a terminal operation is invoked**, allowing for optimization strategies like short-circuiting.
+4. **Single-Use Only:** A stream cannot be reused once a terminal operation has executed. Attempting to do so throws an `IllegalStateException`.
+5. **Parallelizability:** Streams can easily leverage multi-core hardware by converting to a parallel stream via `.parallel()`.
+
+---
+
+=== Anatomy of a Stream Pipeline
+
+Every stream execution consists of three sequential phases:
+
+[cols="1,2,2", options="header"]
+|===
+| Pipeline Stage | Purpose | Examples
+| **1. Source** | Generates or attaches to the raw stream of data. | `Collection.stream()`, `Arrays.stream()`, `Stream.of()`, `Files.lines()`
+| **2. Intermediate Operations** | Transforms the stream into another stream (lazy evaluation). | `filter()`, `map()`, `flatMap()`, `sorted()`, `distinct()`, `peek()`
+| **3. Terminal Operation** | Triggers execution, consumes the stream, and yields a non-stream result. | `collect()`, `forEach()`, `reduce()`, `count()`, `findFirst()`, `anyMatch()`
+|===
+
+---
+
+=== Intermediate vs. Terminal Operations
+
+The distinction between intermediate and terminal operations determines how and when computational work is executed:
+
+[cols="1,2,2", options="header"]
+|===
+| Feature | Intermediate Operations | Terminal Operations
+| **Return Type** | Always returns a new `Stream<T>` instance. | Returns a non-stream type (e.g., `List`, `long`, `Optional`, `void`).
+| **Execution Timing** | **Lazy** (No work is performed immediately). | **Eager** (Triggers the processing pipeline).
+| **Quantity per Pipeline** | Zero or more operations can be chained together. | **Exactly one** operation terminates the pipeline.
+|===
+
+---
+
+=== Code Example: Processing Data Pipelines
+
+[source,java]
+----
+import java.util.Comparator;
+import java.util.List;
+import java.util.stream.Collectors;
+
+class Employee {
+    private String name;
+    private String department;
+    private double salary;
+
+    public Employee(String name, String department, double salary) {
+        this.name = name;
+        this.department = department;
+        this.salary = salary;
+    }
+
+    public String getName() { return name; }
+    public String getDepartment() { return department; }
+    public double getSalary() { return salary; }
+}
+
+class StreamApiDemo {
+    public void executeExamples() {
+        List<Employee> employees = List.of(
+            new Employee("Alice", "Engineering", 95000),
+            new Employee("Bob", "Marketing", 55000),
+            new Employee("Charlie", "Engineering", 120000),
+            new Employee("Diana", "Engineering", 80000),
+            new Employee("Eve", "HR", 60000)
+        );
+
+        // Scenario: Extract sorted names of Engineers earning over $80,000
+        List<String> topEngineers = employees.stream()
+            // 1. Intermediate: Filter engineering department
+            .filter(e -> "Engineering".equals(e.getDepartment()))
+            // 2. Intermediate: Filter salary threshold
+            .filter(e -> e.getSalary() > 80000)
+            // 3. Intermediate: Sort by salary descending
+            .sorted(Comparator.comparingDouble(Employee::getSalary).reversed())
+            // 4. Intermediate: Extract names (Employee -> String)
+            .map(Employee::getName)
+            // 5. Terminal: Collect results into an unmodifiable List
+            .collect(Collectors.toList());
+
+        System.out.println("Top Engineers: " + topEngineers);
+        // Output: [Charlie, Alice]
+
+        // Terminal Reduction Example: Calculate total engineering payroll
+        double totalEngPayroll = employees.stream()
+            .filter(e -> "Engineering".equals(e.getDepartment()))
+            .mapToDouble(Employee::getSalary)
+            .sum();
+
+        System.out.println("Total Engineering Payroll: $" + totalEngPayroll);
+    }
+}
+----
+
+== Mapping Elements in Java Streams
+
+**Mapping** operations are intermediate operations that transform the elements of a stream into new forms or types. Java provides two fundamental mapping methods: **`map()`** and **`flatMap()`**, alongside primitive-specialized variants.
+
+Understanding the difference between 1-to-1 transformations (`map`) and 1-to-many transformations (`flatMap`) is essential for building complex stream processing pipelines.
+
+=== `map()` vs. `flatMap()`
+
+[cols="1,2,2", options="header"]
+|===
+| Feature | `map()` | `flatMap()`
+| **Function Type** | Accepts `Function<T, R>`. | Accepts `Function<T, Stream<R>>`.
+| **Mapping Ratio** | **1-to-1:** Every input element produces exactly one output element. | **1-to-Many / Flattening:** Every input element produces a sub-stream (0, 1, or many elements), which are merged into a single flat stream.
+| **Output Type** | `Stream<R>` | `Stream<R>` (Flattens `Stream<Stream<R>>` into `Stream<R>`).
+| **Primary Use Case** | Extracting fields, transforming values, or changing object types. | Processing nested collections, splitting strings into tokens, or unwrapping `Optional` values.
+|===
+
+---
+
+=== Primitive Mapping Operations
+
+To avoid performance costs associated with generic object wrappers (auto-boxing/unboxing), the Stream API offers unboxed primitive mappers:
+
+* **`mapToInt(ToIntFunction<T>)`** $\rightarrow$ Produces an `IntStream`
+* **`mapToLong(ToLongFunction<T>)`** $\rightarrow$ Produces a `LongStream`
+* **`mapToDouble(ToDoubleFunction<T>)`** $\rightarrow$ Produces a `DoubleStream`
+
+---
+
+=== Code Example: Standard Mapping, Flattening, and Primitive Conversions
+
+[source,java]
+----
+import java.util.List;
+import java.util.stream.Collectors;
+
+class Order {
+    private String orderId;
+    private List<String> items;
+
+    public Order(String orderId, List<String> items) {
+        this.orderId = orderId;
+        this.items = items;
+    }
+
+    public String getOrderId() { return orderId; }
+    public List<String> getItems() { return items; }
+}
+
+class MappingElementsDemo {
+    public void executeExamples() {
+        List<Order> orders = List.of(
+            new Order("ORD-01", List.of("Laptop", "Mouse")),
+            new Order("ORD-02", List.of("Headphones")),
+            new Order("ORD-03", List.of("Keyboard", "Monitor", "HDMI Cable"))
+        );
+
+        // 1. Using map() for 1-to-1 extraction (Order -> String)
+        List<String> orderIds = orders.stream()
+                                      .map(Order::getOrderId)
+                                      .collect(Collectors.toList());
+        System.out.println("Order IDs: " + orderIds);
+        // Output: [ORD-01, ORD-02, ORD-03]
+
+        // 2. Using flatMap() to flatten nested collections (Order -> Stream<String>)
+        List<String> allPurchasedItems = orders.stream()
+                                               .map(Order::getItems)      // Stream<List<String>>
+                                               .flatMap(List::stream)     // Stream<String> (Flattened)
+                                               .collect(Collectors.toList());
+        System.out.println("All Items: " + allPurchasedItems);
+        // Output: [Laptop, Mouse, Headphones, Keyboard, Monitor, HDMI Cable]
+
+        // 3. Primitive Mapping with mapToInt()
+        int totalItemCount = orders.stream()
+                                   .mapToInt(order -> order.getItems().size()) // Order -> int
+                                   .sum();
+        System.out.println("Total Items Sold: " + totalItemCount); // 6
+    }
+}
+----
+
+== Intermediate vs. Terminal Operations
+
+Stream operations are divided into two distinct categories that work together to form a processing pipeline: **Intermediate Operations** and **Terminal Operations**.
+
+=== Core Comparison
+
+[cols="1,2,2", options="header"]
+|===
+| Dimension | Intermediate Operations | Terminal Operations
+| **Return Type** | Returns a **new `Stream<T>`** (allows method chaining). | Returns a **non-stream result** (`List`, `int`, `Optional`, `void`).
+| **Execution** | **Lazy** (No data processing occurs when called). | **Eager** (Triggers the actual pipeline execution).
+| **Pipeline Role** | Configures transformations, filters, or mappings. | Consumes the stream and produces a final outcome.
+| **Count per Pipeline** | **Zero or more** can be chained sequentially. | **Exactly one** (closes and consumes the stream).
+|===
+
+---
+
+=== Lazy Evaluation in Action
+
+Because intermediate operations are lazy, stream elements are processed **on demand** as requested by the terminal operation. This enables optimizations like **short-circuiting** (stopping early once a condition is met) and **loop fusion** (combining multiple operations into a single pass over the data).
+
+[source,java]
+----
+import java.util.List;
+
+class LazyExecutionDemo {
+    public void demonstrate() {
+        List<String> names = List.of("Alice", "Bob", "Charlie", "David");
+
+        // 1. Defining intermediate operations does NOT print anything yet
+        var stream = names.stream()
+            .filter(name -> {
+                System.out.println("Filter evaluated for: " + name);
+                return name.length() > 3;
+            })
+            .map(name -> {
+                System.out.println("Map evaluated for: " + name);
+                return name.toUpperCase();
+            });
+
+        System.out.println("--- Stream configured, triggering terminal operation ---");
+
+        // 2. Terminal operation (findFirst) triggers pipeline execution
+        // Short-circuiting stops evaluation after finding "ALICE"
+        String first = stream.findFirst().orElse("");
+        System.out.println("Result: " + first);
+    }
+}
+----
+
+== Slicing Streams in Java
+
+**Slicing operations** allow you to extract a specific subset or range of elements from a stream. Java provides two traditional size-based slicing methods (`limit` and `skip`), alongside conditional slicing methods introduced in Java 9 (`takeWhile` and `dropWhile`).
+
+These operations are intermediate operations that help optimize pipeline execution through **short-circuiting**—stopping processing as soon as the slice condition is met.
+
+=== Slicing Methods Overview
+
+[cols="1,2,2", options="header"]
+|===
+| Method | Strategy | Behavior
+| **`limit(n)`** | Size-based | Truncates the stream to contain **at most `n` elements**.
+| **`skip(n)`** | Size-based | Discards the **first `n` elements** and passes the remaining elements down the pipeline.
+| **`takeWhile(predicate)`** | Conditional (Java 9+) | Takes elements from the start of the stream **until the predicate first fails**, then stops.
+| **`dropWhile(predicate)`** | Conditional (Java 9+) | Drops elements from the start **until the predicate first fails**, then returns all remaining elements.
+|===
+
+---
+
+=== `takeWhile()` vs. `filter()`
+
+A common point of confusion is how `takeWhile` differs from a standard `filter`:
+
+* **`filter()`:** Evaluates **every single element** in the stream against the predicate.
+* **`takeWhile()`:** Assumes or leverages stream order. It evaluates elements sequentially and **short-circuits immediately** upon encountering the first element that fails the predicate—ignoring all remaining elements even if they might pass later.
+
+---
+
+=== Code Example: Size-Based Pagination and Conditional Slicing
+
+[source,java]
+----
+import java.util.List;
+import java.util.stream.Collectors;
+
+class SlicingStreamsDemo {
+    public void executeExamples() {
+        List<Integer> numbers = List.of(10, 20, 30, 40, 50, 60, 70, 80);
+
+        // 1. Size-Based Slicing (Pagination Pattern)
+        // Skip first 2 items, take next 3 items
+        List<Integer> pageTwo = numbers.stream()
+                                       .skip(2)   // Ignores 10, 20
+                                       .limit(3)  // Takes 30, 40, 50
+                                       .collect(Collectors.toList());
+        System.out.println("Page 2: " + pageTwo); // [30, 40, 50]
+
+        // Sorted data stream for conditional slicing
+        List<Integer> sortedScores = List.of(95, 90, 85, 60, 40, 88);
+        // Notice 88 is after 40!
+
+        // 2. Conditional Slicing: takeWhile()
+        // Takes elements until it hits the FIRST score below 70
+        List<Integer> topStreak = sortedScores.stream()
+                                              .takeWhile(score -> score >= 70)
+                                              .collect(Collectors.toList());
+        System.out.println("Top Streak: " + topStreak);
+        // Output: [95, 90, 85] (Stops at 60; misses 88!)
+
+        // 3. Conditional Slicing: dropWhile()
+        // Drops elements until it hits the FIRST score below 70, then keeps everything else
+        List<Integer> remainingAfterDrop = sortedScores.stream()
+                                                       .dropWhile(score -> score >= 70)
+                                                       .collect(Collectors.toList());
+        System.out.println("After Drop: " + remainingAfterDrop);
+        // Output: [60, 40, 88]
+    }
+}
+----
+
+== Sorting Streams in Java
+
+Sorting is an intermediate operation that reorders elements within a stream. In the Java Stream API, sorting is performed using the **`sorted()`** method, which comes in two variations: natural ordering and custom ordering via a `Comparator`.
+
+Sorting is a **stateful, boundary operation**—to sort a stream, all elements must be buffered and processed in memory before any element can move to the next stage in the pipeline.
+
+=== Sorting Method Variants
+
+[cols="1,2,2", options="header"]
+|===
+| Method Signature | Requirements | Behavior
+| **`sorted()`** | Elements must implement `Comparable<T>`. | Sorts elements according to their **natural ordering** (e.g., alphabetical for `String`, numerical for numbers).
+| **`sorted(Comparator<? super T>)`** | Accepts a explicit `Comparator<T>`. | Sorts elements according to the **custom comparison logic** provided by the comparator.
+|===
+
+---
+
+=== Building Complex Comparators
+
+Java 8 introduced powerful static and default factory methods on the `Comparator` interface, allowing clean, declarative comparator construction:
+
+* **`Comparator.comparing(Function)`:** Extracts a key for sorting (e.g., `Comparator.comparing(User::getLastName)`).
+* **`thenComparing(Function)`:** Chains secondary sort conditions when primary keys are equal.
+* **`reversed()`:** Inverts the comparison order.
+* **`Comparator.nullsFirst()` / `nullsLast()`:** Handles `null` values gracefully without throwing `NullPointerException`.
+
+---
+
+=== Code Example: Natural Sorting, Custom Comparators, and Multi-Level Sorting
+
+[source,java]
+----
+import java.util.Comparator;
+import java.util.List;
+import java.util.stream.Collectors;
+
+class Employee {
+    private String firstName;
+    private String lastName;
+    private double salary;
+
+    public Employee(String firstName, String lastName, double salary) {
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.salary = salary;
+    }
+
+    public String getFirstName() { return firstName; }
+    public String getLastName() { return lastName; }
+    public double getSalary() { return salary; }
+
+    @Override
+    public String toString() {
+        return firstName + " " + lastName + " ($" + salary + ")";
+    }
+}
+
+class SortingStreamsDemo {
+    public void executeExamples() {
+        // 1. Natural Sorting on Strings
+        List<String> cities = List.of("Tokyo", "London", "New York", "Berlin");
+        List<String> sortedCities = cities.stream()
+                                          .sorted() // Natural alphabetical order
+                                          .collect(Collectors.toList());
+        System.out.println("Sorted Cities: " + sortedCities);
+        // Output: [Berlin, London, New York, Tokyo]
+
+        // Sample Data for Custom Object Sorting
+        List<Employee> staff = List.of(
+            new Employee("Alice", "Smith", 90000),
+            new Employee("Bob", "Jones", 110000),
+            new Employee("Charlie", "Smith", 85000),
+            new Employee("Diana", "Adams", 110000)
+        );
+
+        // 2. Custom Sorting: Salary Descending
+        List<Employee> highestPaid = staff.stream()
+            .sorted(Comparator.comparingDouble(Employee::getSalary).reversed())
+            .collect(Collectors.toList());
+        System.out.println("Highest Paid First: " + highestPaid);
+
+        // 3. Multi-Level Chained Sorting:
+        // Primary: Salary (Descending) -> Secondary: Last Name (Ascending) -> Tertiary: First Name
+        Comparator<Employee> complexComparator = Comparator
+            .comparingDouble(Employee::getSalary).reversed()
+            .thenComparing(Employee::getLastName)
+            .thenComparing(Employee::getFirstName);
+
+        List<Employee> multiSortedStaff = staff.stream()
+                                               .sorted(complexComparator)
+                                               .collect(Collectors.toList());
+
+        System.out.println("Multi-Sorted Staff:");
+        multiSortedStaff.forEach(e -> System.out.println("  " + e));
+    }
+}
+----
+
+== Getting Unique Elements in Java Streams
+
+To filter out duplicate elements from a stream, the Stream API provides the **`distinct()`** intermediate operation. It returns a new stream consisting of only unique elements, based on their logical equality.
+
+=== How `distinct()` Evaluates Uniqueness
+
+* **Object Streams:** Uses the **`Object.equals(Object)`** and **`hashCode()`** methods of the stream's elements. For custom objects to work correctly with `distinct()`, both methods must be properly overridden.
+* **Primitive Streams:** Compares raw values directly (`int`, `long`, `double`).
+* **Stateful Operation:** Like `sorted()`, `distinct()` is stateful—it must maintain an internal set of previously seen elements as elements flow through the pipeline.
+
+---
+
+=== Quick Code Example
+
+[source,java]
+----
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
+
+class User {
+    private final String email;
+
+    public User(String email) { this.email = email; }
+
+    // Must override equals and hashCode for distinct() to identify duplicates
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        User user = (User) o;
+        return Objects.equals(email, user.email);
+    }
+
+    @Override
+    public int hashCode() { return Objects.hash(email); }
+
+    @Override
+    public String toString() { return email; }
+}
+
+class DistinctStreamDemo {
+    public void runDemo() {
+        // 1. Primitive/String Duplicates
+        List<Integer> numbers = List.of(1, 2, 2, 3, 4, 4, 4, 5);
+        List<Integer> uniqueNumbers = numbers.stream()
+                                             .distinct()
+                                             .collect(Collectors.toList());
+        System.out.println("Unique numbers: " + uniqueNumbers); // [1, 2, 3, 4, 5]
+
+        // 2. Custom Object Duplicates
+        List<User> users = List.of(
+            new User("alice@example.com"),
+            new User("bob@example.com"),
+            new User("alice@example.com") // Duplicate email
+        );
+
+        List<User> uniqueUsers = users.stream()
+                                      .distinct()
+                                      .collect(Collectors.toList());
+        System.out.println("Unique users: " + uniqueUsers); // [alice@example.com, bob@example.com]
+    }
+}
+----
+
+== Peeking Elements in Java Streams
+
+The **`peek()`** method (`Stream.peek(Consumer<T>)`) is an intermediate operation designed primarily to **support debugging and logging**. It allows you to inspect elements as they flow through the stream pipeline without altering the elements or modifying the stream's structure.
+
+=== The Interface Contract
+
+[source,java]
+----
+Stream<T> peek(Consumer<? super T> action)
+----
+
+`peek()` accepts a `Consumer<T>`, performs the provided action on each element that reaches that stage of the pipeline, and returns an identical stream.
+
+---
+
+=== Primary Purpose: Stream Pipeline Visibility
+
+Because streams execute lazily and process elements sequentially through fused operations, it can be difficult to inspect intermediate states. `peek()` acts as a diagnostic window to observe data transformations step by step.
+
+<Image src="image_agent_tag_16905725521211418342" alt="Diagram showing Java Stream API processing pipeline from input source through intermediate operations to terminal operation output" caption="Inserting peek() intermediate steps into a stream execution pipeline" />
+
+---
+
+=== Critical Gotchas and Anti-Patterns
+
+While useful during development, `peek()` comes with important caveats:
+
+1. **Lazy Execution Dependency:** Because `peek()` is an intermediate operation, it **will not execute at all** unless a terminal operation (like `collect()` or `forEach()`) triggers the pipeline.
+2. **Compiler Optimizations May Skip `peek()`:** In some Java versions or stream configurations (e.g., calling `count()` where the size is known without evaluating elements), the runtime engine may optimize away calls to `peek()` entirely.
+3. **Do Not Mutate State:** Avoid using `peek()` to modify external data structures or mutate object state. Relying on side effects inside `peek()` violates functional principles and leads to unpredictable bugs—especially in parallel streams.
+
+---
+
+=== Code Example: Debugging a Multi-Step Pipeline
+
+[source,java]
+----
+import java.util.List;
+import java.util.stream.Collectors;
+
+class PeekStreamDemo {
+    public void executeExample() {
+        List<String> rawInputs = List.of("apple", "banana", "apricot", "cherry");
+
+        List<String> processed = rawInputs.stream()
+            // 1. Inspect elements coming from the source
+            .peek(item -> System.out.println("From Source: " + item))
+
+            // 2. Filter elements starting with 'a'
+            .filter(item -> item.startsWith("a"))
+            .peek(item -> System.out.println("  Passed Filter: " + item))
+
+            // 3. Transform to uppercase
+            .map(String::toUpperCase)
+            .peek(item -> System.out.println("    After Map: " + item))
+
+            // 4. Terminal operation triggers the pipeline
+            .collect(Collectors.toList());
+
+        System.out.println("Final Result: " + processed);
+    }
+}
+----
+
+==== Console Output Sequence
+Notice how elements flow vertically through the pipeline one at a time due to loop fusion:
+[source,text]
+----
+From Source: apple
+  Passed Filter: apple
+    After Map: APPLE
+From Source: banana
+From Source: apricot
+  Passed Filter: apricot
+    After Map: APRICOT
+From Source: cherry
+Final Result: [APPLE, APRICOT]
+----
+
+== Simple Reducers in Java Streams
+
+**Terminal Reduction Operations** (or "reducers") consume a stream and combine its elements into a single summary result—such as a primitive value (`int`, `long`, `double`), a single object, or an `Optional`.
+
+Java provides specialized built-in reducers for common operations like counting, finding extreme values, and checking matching conditions, alongside the general-purpose `reduce()` method.
+
+=== Built-In Summary and Matching Reducers
+
+[cols="1,2,2", options="header"]
+|===
+| Category | Method | Description / Return Type
+| **Aggregation** | **`count()`** | Returns the total count of elements as a `long`.
+| **Extremes** | **`min(Comparator)`** | Returns the smallest element wrapped in an `Optional<T>`.
+| **Extremes** | **`max(Comparator)`** | Returns the largest element wrapped in an `Optional<T>`.
+| **Matching** | **`anyMatch(Predicate)`** | Short-circuits and returns `true` if **at least one** element matches.
+| **Matching** | **`allMatch(Predicate)`** | Short-circuits and returns `true` if **every** element matches.
+| **Matching** | **`noneMatch(Predicate)`** | Short-circuits and returns `true` if **no** elements match.
+| **Search** | **`findFirst()`** | Short-circuits and returns the **first element** in encounter order as an `Optional<T>`.
+| **Search** | **`findAny()`** | Short-circuits and returns **any element** (optimized for parallel processing) as an `Optional<T>`.
+|===
+
+---
+
+=== General-Purpose Reduction: `reduce()`
+
+The **`reduce()`** method combines stream elements step-by-step using an associative accumulation function (`BinaryOperator`). It comes in three overloads:
+
+1. **`Optional<T> reduce(BinaryOperator<T> accumulator)`:** Combines elements sequentially; returns `Optional.empty()` if the stream is empty.
+2. **`T reduce(T identity, BinaryOperator<T> accumulator)`:** Uses a starting `identity` value. Returns `identity` if the stream is empty (no `Optional` wrapper needed).
+3. **`<U> U reduce(U identity, BiFunction<U, ? super T, U> accumulator, BinaryOperator<U> combiner)`:** Used for parallel streams where target type `U` differs from stream type `T`.
+
+---
+
+=== Code Example: Aggregations, Matching, and `reduce()`
+
+[source,java]
+----
+import java.util.Comparator;
+import java.util.List;
+import java.util.Optional;
+import java.util.function.BinaryOperator;
+
+class SimpleReducersDemo {
+    public void executeExamples() {
+        List<Integer> numbers = List.of(5, 12, 8, 20, 3);
+
+        // 1. Built-in Extremes: min() and max()
+        Optional<Integer> minNum = numbers.stream().min(Comparator.naturalOrder());
+        Optional<Integer> maxNum = numbers.stream().max(Integer::compareTo);
+
+        System.out.println("Min: " + minNum.orElse(0)); // 3
+        System.out.println("Max: " + maxNum.orElse(0)); // 20
+
+        // 2. Short-Circuit Matching
+        boolean hasLargeNumber = numbers.stream().anyMatch(n -> n > 15);
+        boolean allPositive = numbers.stream().allMatch(n -> n > 0);
+
+        System.out.println("Has > 15: " + hasLargeNumber); // true
+        System.out.println("All Positive: " + allPositive); // true
+
+        // 3. General Reduction without Identity (Returns Optional)
+        Optional<Integer> product = numbers.stream()
+                                           .reduce((a, b) -> a * b);
+        System.out.println("Product: " + product.orElse(0)); // 3600
+
+        // 4. General Reduction with Identity
+        // Starting identity = 100 -> 100 + 5 + 12 + 8 + 20 + 3 = 148
+        int sumWithIdentity = numbers.stream()
+                                     .reduce(100, Integer::sum);
+        System.out.println("Sum with identity: " + sumWithIdentity); // 148
+    }
+}
+----
+
