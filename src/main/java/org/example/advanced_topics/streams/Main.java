@@ -1,4 +1,4 @@
-package org.example.advanced_topics.Streams;
+package org.example.advanced_topics.streams;
 
 public class Main {
     public static void main(String[] args) {

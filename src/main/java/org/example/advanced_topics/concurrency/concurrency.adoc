@@ -1,0 +1,1025 @@
+== Introduction to Java Concurrency
+
+**Concurrency** is the execution of multiple instruction sequences simultaneously. In Java, concurrency allows programs to maximize system resource utilization—particularly across multi-core processors—by breaking tasks into independently executing units called **threads**.
+
+Understanding the distinction between parallelism, thread execution mechanics, and state safety is fundamental to writing resilient concurrent applications.
+
+=== Core Concepts & Terminology
+
+[cols="1,2,2", options="header"]
+|===
+| Concept | Definition | Key Characteristics
+| **Process vs. Thread** | A **Process** is an isolated execution environment with its own memory space. A **Thread** is the smallest unit of execution within a process; threads share process memory. | Processes are isolated; threads share memory space (`Heap`).
+| **Concurrency vs. Parallelism** | **Concurrency** is dealing with many things at once (interleaving tasks). **Parallelism** is doing many things at once (executing simultaneously on separate CPU cores). | Concurrency is structural; parallelism is hardware-dependent execution.
+| **Thread Safety** | Property of code that functions correctly when invoked by multiple threads concurrently without data corruption. | Requires synchronization, immutability, or thread confinement.
+| **Race Condition** | Flaw where the output depends on the unmanaged relative timing or order of thread execution. | Solved via locking mechanisms or atomic operations.
+|===
+
+---
+
+=== The Java Memory Model (JMM) at a Glance
+
+Threads share process memory (the **Heap**), but each thread maintains its own **Call Stack** and working memory cache.
+
+<Image src="image_agent_tag_16235489728551720272" alt="Diagram showing thread stacks sharing heap memory and CPU cache sync" caption="Thread memory architecture: Stacks vs. Shared Heap" />
+
+Concurrency bugs typically stem from two underlying challenges:
+
+1. **Shared State Mutability:** When two or more threads attempt to read and write to the same mutable memory location simultaneously.
+2. **Memory Visibility:** Changes made by one CPU core/thread may not be immediately visible to other threads due to hardware caching and compiler instruction reordering (addressed using `volatile` or synchronized boundaries).
+
+---
+
+=== Quick Code Example: Thread Creation and the Shared State Problem
+
+[source,java]
+----
+class SharedCounter {
+    private int count = 0;
+
+    // Unsafe: Race condition occurs when incremented by multiple threads concurrently
+    public void incrementUnsafe() {
+        count++; // 3 operations: read, modify, write
+    }
+
+    // Thread-safe: 'synchronized' ensures mutual exclusion and visibility
+    public synchronized void incrementSafe() {
+        count++;
+    }
+
+    public int getCount() { return count; }
+}
+
+class ConcurrencyIntroDemo {
+    public static void main(String[] args) throws InterruptedException {
+        SharedCounter counter = new SharedCounter();
+
+        // Creating and starting two concurrent threads using standard Runnable lambdas
+        Thread t1 = new Thread(() -> {
+            for (int i = 0; i < 1000; i++) counter.incrementSafe();
+        });
+
+        Thread t2 = new Thread(() -> {
+            for (int i = 0; i < 1000; i++) counter.incrementSafe();
+        });
+
+        t1.start();
+        t2.start();
+
+        // Wait for both threads to finish execution
+        t1.join();
+        t2.join();
+
+        System.out.println("Final Counter Value: " + counter.getCount()); // Guaranteed 2000
+    }
+}
+----
+
+== Processes vs. Threads in Java
+
+In operating systems and the Java Virtual Machine (JVM), execution units exist at two levels: **Processes** (heavyweight, isolated runtime environments) and **Threads** (lightweight execution paths within a process).
+
+Understanding how memory and resources are allocated between processes and threads is critical when designing concurrent, scalable applications.
+
+<Image src="image_agent_tag_3846879429602339084" alt="Diagram comparing single process memory layout versus multi-threaded process memory allocation" caption="Process memory isolation vs. multi-threaded shared memory architecture" />
+
+=== Core Differences
+
+[cols="1,2,2", options="header"]
+|===
+| Dimension | Process | Thread
+| **Definition** | An independent executing instance of a program with isolated memory space. | A lightweight path of execution within a process.
+| **Memory Isolation** | **Isolated:** Processes cannot directly access each other's memory space. | **Shared:** Threads share the process **Heap**, **Metaspace**, and open file handles.
+| **Per-Unit Memory** | Owns complete Virtual Address Space, Code segment, Data segment, and Environment. | Maintains its own **Call Stack**, **Program Counter (PC)**, and local variables.
+| **Creation Cost** | **High:** Heavyweight resource allocation managed by the OS. | **Low:** Lightweight creation cost; overhead comes mostly from stack allocation.
+| **Context Switching** | **Slow:** Requires changing virtual memory address maps and flushing CPU caches. | **Fast:** Shares address space; only registers, PC, and stack pointer are swapped.
+| **Inter-Unit Communication** | Requires Inter-Process Communication (IPC) like Sockets, Pipes, or Shared Memory. | Uses shared heap memory, method calls, and synchronization constructs.
+| **Fault Tolerance** | **High:** A crash in one process does not directly affect other processes. | **Low:** An unhandled exception or memory corruption in one thread can crash the entire process JVM.
+|===
+
+---
+
+=== Java Thread Lifecycle
+
+In Java, every thread is represented by a `java.lang.Thread` object. A thread transitions through defined states during its execution lifecycle:
+
+[cols="1,2", options="header"]
+|===
+| Thread State | Description
+| **`NEW`** | Thread object instantiated (`new Thread()`), but `start()` has not been called yet.
+| **`RUNNABLE`** | Thread is executing in the JVM or waiting for OS CPU allocation.
+| **`BLOCKED`** | Waiting to acquire a monitor lock (e.g., waiting to enter a `synchronized` block).
+| **`WAITING`** | Waiting indefinitely for another thread to perform a specific action (`Object.wait()`, `Thread.join()`).
+| **`TIMED_WAITING`** | Waiting for a specified time period (`Thread.sleep(ms)`, `Object.wait(timeout)`).
+| **`TERMINATED`** | Thread has completed execution or died due to an unhandled exception.
+|===
+
+---
+
+=== Java Process Management and Thread Creation
+
+Java provides APIs to manage external operating system processes (`ProcessBuilder` / `ProcessHandle`) as well as native internal threads (`Thread`).
+
+[source,java]
+----
+import java.io.IOException;
+
+class ProcessAndThreadDemo {
+    public static void executeExamples() throws InterruptedException, IOException {
+        // 1. Process API: Interacting with OS-level processes
+        ProcessHandle currentProcess = ProcessHandle.current();
+        System.out.println("JVM Process ID (PID): " + currentProcess.pid());
+
+        // Launching an external OS process using ProcessBuilder
+        ProcessBuilder pb = new ProcessBuilder("echo", "Hello from External Process");
+        Process process = pb.start();
+        process.waitFor(); // Wait for process termination
+
+        // 2. Thread API: Creating and inspecting in-process threads
+        Thread workerThread = new Thread(() -> {
+            Thread current = Thread.currentThread();
+            System.out.println("Worker Thread Name: " + current.getName());
+            System.out.println("Worker Thread State: " + current.getState());
+        }, "Custom-Worker-1");
+
+        System.out.println("Worker State before start: " + workerThread.getState()); // NEW
+
+        workerThread.start(); // Moves thread state to RUNNABLE
+        workerThread.join();  // Main thread waits until worker terminates
+
+        System.out.println("Worker State after completion: " + workerThread.getState()); // TERMINATED
+    }
+}
+----
+
+
+== Processes vs. Threads in Java
+
+In operating systems and the Java Virtual Machine (JVM), execution units exist at two levels: **Processes** (heavyweight, isolated runtime environments) and **Threads** (lightweight execution paths within a process).
+
+Understanding how memory and resources are allocated between processes and threads is critical when designing concurrent, scalable applications.
+
+<Image src="image_agent_tag_3846879429602339084" alt="Diagram comparing single process memory layout versus multi-threaded process memory allocation" caption="Process memory isolation vs. multi-threaded shared memory architecture" />
+
+=== Core Differences
+
+[cols="1,2,2", options="header"]
+|===
+| Dimension | Process | Thread
+| **Definition** | An independent executing instance of a program with isolated memory space. | A lightweight path of execution within a process.
+| **Memory Isolation** | **Isolated:** Processes cannot directly access each other's memory space. | **Shared:** Threads share the process **Heap**, **Metaspace**, and open file handles.
+| **Per-Unit Memory** | Owns complete Virtual Address Space, Code segment, Data segment, and Environment. | Maintains its own **Call Stack**, **Program Counter (PC)**, and local variables.
+| **Creation Cost** | **High:** Heavyweight resource allocation managed by the OS. | **Low:** Lightweight creation cost; overhead comes mostly from stack allocation.
+| **Context Switching** | **Slow:** Requires changing virtual memory address maps and flushing CPU caches. | **Fast:** Shares address space; only registers, PC, and stack pointer are swapped.
+| **Inter-Unit Communication** | Requires Inter-Process Communication (IPC) like Sockets, Pipes, or Shared Memory. | Uses shared heap memory, method calls, and synchronization constructs.
+| **Fault Tolerance** | **High:** A crash in one process does not directly affect other processes. | **Low:** An unhandled exception or memory corruption in one thread can crash the entire process JVM.
+|===
+
+---
+
+=== Java Thread Lifecycle
+
+In Java, every thread is represented by a `java.lang.Thread` object. A thread transitions through defined states during its execution lifecycle:
+
+[cols="1,2", options="header"]
+|===
+| Thread State | Description
+| **`NEW`** | Thread object instantiated (`new Thread()`), but `start()` has not been called yet.
+| **`RUNNABLE`** | Thread is executing in the JVM or waiting for OS CPU allocation.
+| **`BLOCKED`** | Waiting to acquire a monitor lock (e.g., waiting to enter a `synchronized` block).
+| **`WAITING`** | Waiting indefinitely for another thread to perform a specific action (`Object.wait()`, `Thread.join()`).
+| **`TIMED_WAITING`** | Waiting for a specified time period (`Thread.sleep(ms)`, `Object.wait(timeout)`).
+| **`TERMINATED`** | Thread has completed execution or died due to an unhandled exception.
+|===
+
+---
+
+=== Java Process Management and Thread Creation
+
+Java provides APIs to manage external operating system processes (`ProcessBuilder` / `ProcessHandle`) as well as native internal threads (`Thread`).
+
+[source,java]
+----
+import java.io.IOException;
+
+class ProcessAndThreadDemo {
+    public static void executeExamples() throws InterruptedException, IOException {
+        // 1. Process API: Interacting with OS-level processes
+        ProcessHandle currentProcess = ProcessHandle.current();
+        System.out.println("JVM Process ID (PID): " + currentProcess.pid());
+
+        // Launching an external OS process using ProcessBuilder
+        ProcessBuilder pb = new ProcessBuilder("echo", "Hello from External Process");
+        Process process = pb.start();
+        process.waitFor(); // Wait for process termination
+
+        // 2. Thread API: Creating and inspecting in-process threads
+        Thread workerThread = new Thread(() -> {
+            Thread current = Thread.currentThread();
+            System.out.println("Worker Thread Name: " + current.getName());
+            System.out.println("Worker Thread State: " + current.getState());
+        }, "Custom-Worker-1");
+
+        System.out.println("Worker State before start: " + workerThread.getState()); // NEW
+
+        workerThread.start(); // Moves thread state to RUNNABLE
+        workerThread.join();  // Main thread waits until worker terminates
+
+        System.out.println("Worker State after completion: " + workerThread.getState()); // TERMINATED
+    }
+}
+----
+
+== Pausing a Thread in Java
+
+Pausing a thread temporarily suspends its execution for a specified duration or until a condition is met. In Java, the most common way to pause thread execution is via **`Thread.sleep()`** or **`TimeUnit.sleep()`**.
+
+When a thread pauses, its state transitions from **`RUNNABLE`** to **`TIMED_WAITING`**, yielding CPU execution time back to the operating system.
+
+<Image src="image_agent_tag_6888095026515459777" alt="Java thread state transition diagram showing sleep moving a thread from Runnable to Timed Waiting state" caption="Pausing a thread transitions it into the TIMED_WAITING state" />
+
+=== Core Pausing Mechanisms
+
+[cols="1,2,2", options="header"]
+|===
+| Method | Usage | Key Characteristics
+| **`Thread.sleep(ms)`** | Pauses the current executing thread for a duration in milliseconds. | Throws `InterruptedException` if interrupted while sleeping.
+| **`TimeUnit.<UNIT>.sleep(duration)`** | Readability wrapper (e.g., `TimeUnit.SECONDS.sleep(2)`). | Internally delegates to `Thread.sleep()`; improves code clarity.
+| **`Thread.yield()`** | Suggests to the OS scheduler that the current thread is willing to yield CPU usage. | Purely a hint; does not guarantee pausing or state transition.
+|===
+
+---
+
+=== Critical Considerations
+
+1. **Locks Are NOT Released:** Calling `sleep()` inside a `synchronized` block or method **does not release any acquired monitor locks**. Other threads requiring those locks will remain blocked.
+2. **`InterruptedException` Handling:** `sleep()` is a blocking operation. If another thread invokes `interrupt()` on the sleeping thread, the sleep terminates immediately and throws an `InterruptedException`.
+
+---
+
+=== Quick Code Example
+
+[source,java]
+----
+import java.util.concurrent.TimeUnit;
+
+class PauseThreadDemo {
+    public static void main(String[] args) {
+        Thread worker = new Thread(() -> {
+            try {
+                System.out.println("Task started. Pausing for 2 seconds...");
+
+                // Prefer TimeUnit for better readability over Thread.sleep(2000)
+                TimeUnit.SECONDS.sleep(2);
+
+                System.out.println("Resumed execution after pause.");
+            } catch (InterruptedException e) {
+                System.err.println("Thread pause was interrupted!");
+                // Restore interrupted status if not rethrowing
+                Thread.currentThread().interrupt();
+            }
+        });
+
+        worker.start();
+    }
+}
+----
+
+== Joining a Thread in Java
+
+The **`join()`** method allows one thread to pause its execution and wait for another thread to complete. It provides a straightforward mechanism for thread synchronization and coordinating dependent concurrent tasks.
+
+When a thread calls `worker.join()`, its state transitions from **`RUNNABLE`** to **`WAITING`** (or **`TIMED_WAITING`** if a timeout is specified) until the target thread enters the **`TERMINATED`** state.
+
+=== `join()` Overloads
+
+[cols="1,2,2", options="header"]
+|===
+| Method Signature | Waiting Strategy | Behavior
+| **`join()`** | Indefinite | Blocks the calling thread **indefinitely** until the target thread finishes execution.
+| **`join(long millis)`** | Timed | Blocks for **at most `millis` milliseconds**. Resumes if the target thread finishes early or the time expires.
+|===
+
+---
+
+=== Critical Considerations
+
+1. **`InterruptedException` Handling:** `join()` is a blocking method. If the waiting thread is interrupted while blocked, it throws an `InterruptedException`.
+2. **Order Matters:** You must call `start()` on the target thread **before** calling `join()`. Calling `join()` on a thread that hasn't been started returns immediately without waiting.
+
+---
+
+=== Quick Code Example
+
+[source,java]
+----
+import java.util.concurrent.TimeUnit;
+
+class JoinThreadDemo {
+    public static void main(String[] args) {
+        Thread worker = new Thread(() -> {
+            try {
+                System.out.println("Worker: Starting heavy computation...");
+                TimeUnit.SECONDS.sleep(2); // Simulate background work
+                System.out.println("Worker: Computation complete.");
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }, "Worker-Thread");
+
+        worker.start(); // Start concurrent execution
+
+        try {
+            System.out.println("Main: Waiting for worker thread to complete...");
+
+            // Main thread blocks here until 'worker' thread finishes
+            worker.join();
+
+            System.out.println("Main: Worker finished. Proceeding with results.");
+        } catch (InterruptedException e) {
+            System.err.println("Main thread was interrupted while waiting.");
+            Thread.currentThread().interrupt();
+        }
+    }
+}
+----
+
+== Interrupting a Thread in Java
+
+In Java, interrupting a thread is a **cooperative mechanism**. Calling `interrupt()` does not forcibly terminate or kill a running thread—it merely signals to the target thread that it should stop its current work and clean up.
+
+The target thread is responsible for actively checking its interruption status or handling an `InterruptedException` when performing blocking operations.
+
+<Image src="image_agent_tag_6001621291017001287" alt="Java thread lifecycle diagram illustrating transitions between Runnable, Waiting, and Terminated states" caption="Interrupting a sleeping or waiting thread forces a transition out of the Waiting state via InterruptedException" />
+
+=== The Interruption API
+
+[cols="1,2,2", options="header"]
+|===
+| Method Signature | Scope | Behavior
+| **`thread.interrupt()`** | Instance | Sets the **interruption flag** on the target thread to `true`. If the thread is blocked in a method like `sleep()`, `wait()`, or `join()`, it wakes up immediately and throws an `InterruptedException`.
+| **`thread.isInterrupted()`** | Instance | Queries the interruption flag status (`true`/`false`) **without modifying** the flag state.
+| **`Thread.interrupted()`** | Static | Checks if the **current thread** has been interrupted and **clears the interruption flag** (resets it back to `false`).
+|===
+
+---
+
+=== Two Key Scenarios for Handling Interruption
+
+1. **Running Tasks (Polled Interruption):** For active loops or CPU-bound tasks, the code must periodically check `Thread.currentThread().isInterrupted()` and exit gracefully when `true`.
+2. **Blocking Operations (`InterruptedException`):** When methods like `Thread.sleep()` catch an `InterruptedException`, Java **automatically clears the interruption flag**. It is best practice to re-interrupt the thread (`Thread.currentThread().interrupt()`) to restore the signal for callers up the stack.
+
+---
+
+=== Quick Code Example: Polling and Blocking Interruption
+
+[source,java]
+----
+import java.util.concurrent.TimeUnit;
+
+class InterruptThreadDemo {
+    public static void main(String[] args) throws InterruptedException {
+        // Scenario 1: Active loop responding to interruption flag
+        Thread activeWorker = new Thread(() -> {
+            System.out.println("Active Worker: Running loop...");
+            while (!Thread.currentThread().isInterrupted()) {
+                // Perform small units of work...
+            }
+            System.out.println("Active Worker: Interruption flag detected! Shutting down gracefully.");
+        });
+
+        // Scenario 2: Blocking task waking up on InterruptedException
+        Thread sleepingWorker = new Thread(() -> {
+            try {
+                System.out.println("Sleeping Worker: Going to sleep for 10 seconds...");
+                TimeUnit.SECONDS.sleep(10);
+            } catch (InterruptedException e) {
+                System.out.println("Sleeping Worker: Interrupted while sleeping!");
+                // Best practice: Restore interrupted status
+                Thread.currentThread().interrupt();
+            }
+        });
+
+        activeWorker.start();
+        sleepingWorker.start();
+
+        // Allow workers to start running
+        TimeUnit.MILLISECONDS.sleep(500);
+
+        // Send interruption signals
+        System.out.println("Main: Sending interrupt() to both threads...");
+        activeWorker.interrupt();
+        sleepingWorker.interrupt();
+
+        activeWorker.join();
+        sleepingWorker.join();
+        System.out.println("Main: Both workers terminated cleanly.");
+    }
+}
+----
+
+== Concurrency Issues in Java
+
+When multiple threads execute concurrently and access shared mutable state without proper synchronization, various runtime bugs can occur. These concurrency issues are notoriously difficult to reproduce, test, and debug because they depend on thread execution timing and CPU core scheduling.
+
+=== Primary Categories of Concurrency Issues
+
+[cols="1,2,2", options="header"]
+|===
+| Concurrency Issue | Cause | Symptoms / Impact
+| **Race Condition** | Two or more threads concurrently read and write shared data without mutual exclusion. | Data corruption, incorrect mathematical results, subtle state bugs.
+| **Deadlock** | Two or more threads are permanently blocked, each waiting for a lock held by the other in a circular dependency. | Complete application freeze or frozen worker threads.
+| **Livelock** | Threads continuously change their state in response to each other without making forward progress. | High CPU usage with no actual work completed.
+| **Starvation** | A thread is perpetually denied access to shared resources or CPU time due to higher-priority threads or greedy locks. | Poor responsiveness or non-responsive background tasks.
+| **Memory Visibility Issues** | Thread local CPU caches fail to synchronize with main heap memory (`Heap`). | One thread cannot see state updates made by another thread.
+|===
+
+---
+
+=== Deep Dive: Understanding Deadlocks
+
+A **Deadlock** occurs when a circular dependency chain is formed between threads and locks. For a deadlock to occur, four conditions (Coffman conditions) must be present simultaneously: **Mutual Exclusion**, **Hold and Wait**, **No Preemption**, and **Circular Wait**.
+
+<Image src="image_agent_tag_1252088535520989533" alt="Circular lock dependency diagram showing Thread 1 holding Resource 2 and waiting for Resource 1 while Thread 2 holds Resource 1 and waits for Resource 2" caption="Deadlock scenario: Circular wait condition between threads acquiring locks in opposite orders" />
+
+---
+
+=== Code Example: Race Condition and Deadlock
+
+[source,java]
+----
+import java.util.concurrent.TimeUnit;
+
+class ConcurrencyIssuesDemo {
+
+    // -------------------------------------------------------------
+    // 1. Race Condition Example: Unsynchronized Shared State
+    // -------------------------------------------------------------
+    static class UnsafeCounter {
+        private int count = 0;
+
+        // Non-atomic read-modify-write operation
+        public void increment() {
+            count++; // Thread A and Thread B reading same initial value causes lost updates
+        }
+
+        public int getCount() { return count; }
+    }
+
+    // -------------------------------------------------------------
+    // 2. Deadlock Example: Inconsistent Lock Ordering
+    // -------------------------------------------------------------
+    static class DeadlockExample {
+        private final Object lockA = new Object();
+        private final Object lockB = new Object();
+
+        public void method1() {
+            synchronized (lockA) {
+                System.out.println("Thread 1: Holding lock A...");
+                sleep(100);
+                synchronized (lockB) { // Waiting for lock B
+                    System.out.println("Thread 1: Acquired lock B.");
+                }
+            }
+        }
+
+        public void method2() {
+            synchronized (lockB) { // Inconsistent order: Lock B acquired first
+                System.out.println("Thread 2: Holding lock B...");
+                sleep(100);
+                synchronized (lockA) { // Waiting for lock A -> DEADLOCK!
+                    System.out.println("Thread 2: Acquired lock A.");
+                }
+            }
+        }
+
+        private void sleep(long ms) {
+            try { TimeUnit.MILLISECONDS.sleep(ms); } catch (InterruptedException ignored) {}
+        }
+    }
+
+    public static void main(String[] args) {
+        DeadlockExample deadlock = new DeadlockExample();
+
+        // Thread 1 attempts to acquire lock A then lock B
+        Thread t1 = new Thread(deadlock::method1, "Thread-1");
+        // Thread 2 attempts to acquire lock B then lock A
+        Thread t2 = new Thread(deadlock::method2, "Thread-2");
+
+        t1.start();
+        t2.start();
+    }
+}
+----
+
+---
+
+=== Prevention Strategies
+
+1. **Eliminate Shared Mutable State:** Use immutability (`record`, `final` fields) or thread confinement (`ThreadLocal`).
+2. **Consistent Lock Ordering:** Always acquire multiple locks in the exact same global order across all threads.
+3. **Use Timed Lock Acquisition:** Prefer `ReentrantLock.tryLock(timeout)` over intrinsic `synchronized` blocks to break potential deadlock cycles.
+4. **Use High-Level Concurrency Utilities:** Prefer thread-safe collections (`ConcurrentHashMap`) and atomic variables (`AtomicInteger`) from `java.util.concurrent`.
+
+== Strategies for Thread Safety in Java
+
+Writing thread-safe code requires managing access to shared mutable state. Thread safety is not about locking everything—it is about choosing the right strategy for the specific concurrency problem.
+
+You mentioned synchronization being "bad"—and you're on the right track! Traditional coarse-grained synchronization (`synchronized`) introduces contention, context-switching overhead, and risks of deadlocks. Modern Java design prioritizes **avoiding shared mutable state altogether** or using low-overhead lock-free constructs before falling back to explicit locking.
+
+<Image src="image_agent_tag_5202033507833584574" alt="Diagram showing Java Thread Safety Strategies including stateless classes, immutable classes, lock-based synchronization, and lock granularity options" caption="Architectural strategies for achieving thread safety in Java applications" />
+
+=== Overview of Thread Safety Strategies
+
+[cols="1,2,2", options="header"]
+|===
+| Strategy | Mechanics | Trade-Offs / Best Used When
+| **1. Thread Confinement** | Isolate data so it is accessed by **only one thread**. | Zero synchronization overhead. Best for request-scoped context (`ThreadLocal`) or local method variables.
+| **2. Immutability** | Make state **read-only** after creation. | Threads can read without locks. Best for domain values, configuration, and data transport (`record`).
+| **3. Atomic Variables** | Use CPU hardware instructions (Compare-And-Swap / CAS) instead of locks. | Highly scalable for single variables. Best for counters, sequence generators, and metrics.
+| **4. Partitioning** | Split data into independent segments or buckets to reduce lock contention. | High throughput for concurrent collections (`ConcurrentHashMap`, `LongAdder`).
+| **5. Synchronization** | Enforce mutual exclusion using locks or `synchronized`. | Necessary for multi-variable invariants, but causes thread blocking and potential contention bottlenecks.
+|===
+
+---
+
+=== Strategy 1: Thread Confinement (`ThreadLocal` & Stack Confinement)
+
+If data is never shared across threads, it doesn't need synchronization.
+
+* **Stack Confinement:** Local variables living entirely inside a method stack are inherently thread-safe because each thread maintains its own call stack.
+* **Thread Confinement (`ThreadLocal<T>`):** Binds a unique instance of an object to the current executing thread.
+
+[source,java]
+----
+import java.text.SimpleDateFormat;
+
+class ConfinementDemo {
+    // ThreadLocal ensures each thread gets its own non-thread-safe SimpleDateFormat instance
+    private static final ThreadLocal<SimpleDateFormat> formatter =
+        ThreadLocal.withInitial(() -> new SimpleDateFormat("yyyy-MM-dd"));
+
+    public String formatDate() {
+        // Safe to use without locking because this instance belongs solely to the calling thread
+        return formatter.get().format(new java.util.Date());
+    }
+}
+----
+
+---
+
+=== Strategy 2: Immutability (`record` & `final`)
+
+An immutable object cannot be modified after construction. Since all state is read-only, infinite threads can safely read it concurrently with **zero locking**.
+
+[source,java]
+----
+// Java records are implicitly final and create immutable data carriers
+public record UserConfig(String theme, int timeoutMs, boolean notificationsEnabled) {
+    // Thread-safe by design: No setters exist, fields are final
+}
+----
+
+---
+
+=== Strategy 3: Lock-Free Atomic Variables (CAS)
+
+Instead of blocking threads using locks, classes in `java.util.concurrent.atomic` (like `AtomicInteger` or `AtomicReference`) rely on low-level CPU operations called **Compare-And-Swap (CAS)**. CAS updates values in a single atomic hardware instruction without stopping other threads.
+
+[source,java]
+----
+import java.util.concurrent.atomic.AtomicInteger;
+
+class AtomicCounterDemo {
+    private final AtomicInteger count = new AtomicInteger(0);
+
+    public void increment() {
+        // Lock-free atomic increment using underlying CAS CPU instructions
+        count.incrementAndGet();
+    }
+
+    public int getCount() { return count.get(); }
+}
+----
+
+---
+
+=== Strategy 4: Partitioning & Striping
+
+Partitioning divides a large data structure into isolated buckets or segments. Threads modifying different keys access different locks or atomic cells, drastically reducing lock contention.
+
+* **`ConcurrentHashMap`:** Uses bucket-level locking and volatile node reads instead of locking the entire map.
+* **`LongAdder`:** Designed for extreme concurrency; maintains a cell array per thread and sums them on demand to eliminate CAS contention.
+
+[source,java]
+----
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.LongAdder;
+
+class PartitioningDemo {
+    // Partitioned Map allowing concurrent reads/writes on separate buckets
+    private final ConcurrentHashMap<String, String> cache = new ConcurrentHashMap<>();
+
+    // Partitioned Adder: Higher throughput than AtomicLong under extreme multi-thread contention
+    private final LongAdder requestCount = new LongAdder();
+
+    public void processRequest(String key, String value) {
+        cache.put(key, value);
+        requestCount.increment(); // Distributes increments across thread-specific cell variables
+    }
+}
+----
+
+---
+
+=== Strategy 5: Explicit Synchronization & Read-Write Locks
+
+While traditional `synchronized` can be a performance bottleneck due to coarse locking, specialized locks like **`ReentrantReadWriteLock`** soften the impact by allowing **unlimited concurrent readers** while locking exclusively for writes.
+
+[source,java]
+----
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+class ReadWriteLockDemo {
+    private final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
+    private int sharedData = 0;
+
+    // Multiple threads can read concurrently as long as no thread is writing
+    public int readData() {
+        rwLock.readLock().lock();
+        try {
+            return sharedData;
+        } finally {
+            rwLock.readLock().unlock();
+        }
+    }
+
+    // Only one thread can write; blocks all readers and writers
+    public void writeData(int value) {
+        rwLock.writeLock().lock();
+        try {
+            this.sharedData = value;
+        } finally {
+            rwLock.writeLock().unlock();
+        }
+    }
+}
+----
+
+== The `volatile` Keyword in Java
+
+In multi-threaded Java applications, performance optimizations like CPU core caching and instruction reordering can cause threads to read stale data. The **`volatile`** keyword field modifier guarantees **memory visibility** across threads by bypassing local CPU registers and caches.
+
+When a field is declared `volatile`, every write to that field is immediately flushed to main memory, and every read is fetched directly from main memory rather than a local thread cache.
+
+<Image src="image_agent_tag_1270975748637529125" alt="Diagram showing how thread local CPU caches cause stale memory reads without memory visibility barriers" caption="Without volatile, thread updates stay in local CPU caches and remain invisible to other threads" />
+
+=== Core Guarantees of `volatile`
+
+[cols="1,2,2", options="header"]
+|===
+| Feature | Guaranteed by `volatile`? | Explanation
+| **Memory Visibility** | **Yes** | Changes made by one thread are instantly visible to all reader threads.
+| **Happens-Before Relationship** | **Yes** | A write to a `volatile` variable establishes a memory fence, ensuring preceding instructions are completed before the write.
+| **Atomicity** | **No (Except for 64-bit Reads/Writes)** | Operations like `count++` (read-modify-write) are **NOT** atomic and still cause race conditions under concurrent updates.
+|===
+
+---
+
+=== The Crucial Limitation: `volatile` vs. Atomicity
+
+A common mistake is assuming `volatile` replaces locks or atomic classes.
+
+* **Safe Use Case:** Single-thread writer, multi-thread readers (e.g., status flags, state toggles).
+* **Unsafe Use Case:** Multiple concurrent writers attempting non-atomic operations (e.g., `count++` or `count = count + 1`).
+
+[CAUTION]
+====
+If an operation relies on the current value of a variable to compute its next value (like `count++`), declaring the variable `volatile` **will not make it thread-safe**. Use `AtomicInteger` or explicit locks instead.
+====
+
+---
+
+=== Code Example: Shutdown Flag Pattern and Non-Atomic Counter Test
+
+[source,java]
+----
+import java.util.concurrent.TimeUnit;
+
+class VolatileDemo {
+
+    // 1. SAFE USE CASE: Shutdown flag (One writer thread, one/many reader threads)
+    static class WorkerTask implements Runnable {
+        // Without 'volatile', the worker thread might cache running = true forever in its CPU cache
+        private volatile boolean running = true;
+
+        public void stop() {
+            this.running = false; // Immediately flushed to main memory
+        }
+
+        @Override
+        public void run() {
+            System.out.println("Worker: Started polling status...");
+            while (running) {
+                // Performing background work...
+            }
+            System.out.println("Worker: Detected running = false. Stopped cleanly!");
+        }
+    }
+
+    // 2. UNSAFE USE CASE: Volatile non-atomic increment
+    static class UnsafeVolatileCounter {
+        private volatile int counter = 0;
+
+        public void increment() {
+            // NOT ATOMIC! Translates to 3 steps: read counter, add 1, write counter back
+            counter++;
+        }
+
+        public int getCounter() { return counter; }
+    }
+
+    public static void main(String[] args) throws InterruptedException {
+        // Testing Shutdown Flag
+        WorkerTask task = new WorkerTask();
+        Thread worker = new Thread(task);
+        worker.start();
+
+        TimeUnit.MILLISECONDS.sleep(500);
+        System.out.println("Main: Stopping worker...");
+        task.stop(); // Worker thread immediately detects this change
+        worker.join();
+
+        System.out.println("--- Volatile Counter Limitation ---");
+        UnsafeVolatileCounter badCounter = new UnsafeVolatileCounter();
+
+        // 2 threads updating the volatile counter concurrently
+        Thread t1 = new Thread(() -> { for (int i = 0; i < 1000; i++) badCounter.increment(); });
+        Thread t2 = new Thread(() -> { for (int i = 0; i < 1000; i++) badCounter.increment(); });
+
+        t1.start();
+        t2.start();
+        t1.join();
+        t2.join();
+
+        // Output will frequently be less than 2000 due to lost updates despite 'volatile'
+        System.out.println("Final Unsafe Volatile Count (Expected 2000): " + badCounter.getCounter());
+    }
+}
+----
+
+== Thread Signaling with `wait()` and `notify()` in Java
+
+Thread signaling allows concurrent threads to communicate with each other regarding state changes or event availability. Instead of continuously polling a condition in a tight CPU loop (busy-waiting), threads can suspend execution using **`wait()`** until another thread notifies them via **`notify()`** or **`notifyAll()`**.
+
+These methods are inherited directly from `java.lang.Object` and rely on intrinsic **monitor locks**.
+
+<Image src="image_agent_tag_17141611397316608928" alt="State transition diagram showing thread moving from Running to Waiting via wait(), then moving to Blocked when notified, before regaining the lock to become Runnable" caption="Thread signaling transitions: Calling wait() releases the monitor lock and enters the Waiting state until notified" />
+
+=== Core Signaling Methods
+
+[cols="1,2,2", options="header"]
+|===
+| Method Signature | Action on Calling Thread | Monitor Lock Behavior
+| **`object.wait()`** | Transitions thread to **`WAITING`** state; suspends execution indefinitely. | **Releases** the monitor lock on `object` so other threads can acquire it.
+| **`object.wait(long timeout)`** | Transitions thread to **`TIMED_WAITING`** state. | **Releases** the monitor lock; wakes up automatically after `timeout` ms if not notified.
+| **`object.notify()`** | Wakes up a **single arbitrary thread** waiting on `object`'s monitor. | **Retains** the lock until the synchronized block/method completes.
+| **`object.notifyAll()`** | Wakes up **all threads** waiting on `object`'s monitor. | **Retains** the lock; notified threads compete to re-acquire the lock one by one.
+|===
+
+---
+
+=== Critical Rules for Thread Signaling
+
+1. **Must Hold the Monitor Lock:** Calling `wait()`, `notify()`, or `notifyAll()` outside a `synchronized` block/method on that object throws an **`IllegalMonitorStateException`** at runtime.
+2. **Always Check Conditions in a `while` Loop:** Never use an `if` statement to evaluate the wait condition. Threads can wake up unexpectedly due to **spurious wakeups** or race conditions between notification and lock acquisition.
+3. **Prefer `notifyAll()` over `notify()`:** `notify()` wakes up only one arbitrary thread. If multiple threads are waiting for different conditions, signaling the wrong thread can lead to a signal loss and permanent deadlocks.
+
+---
+
+=== Code Example: Classic Producer-Consumer Guarded Block
+
+[source,java]
+----
+import java.util.LinkedList;
+import java.util.Queue;
+
+class MessageQueue {
+    private final Queue<String> queue = new LinkedList<>();
+    private final int capacity;
+
+    public MessageQueue(int capacity) {
+        this.capacity = capacity;
+    }
+
+    // Producer method
+    public synchronized void produce(String message) throws InterruptedException {
+        // ALWAYS use a while loop to check conditions before waiting
+        while (queue.size() == capacity) {
+            System.out.println("Queue full. Producer waiting...");
+            wait(); // Releases monitor lock and suspends execution
+        }
+
+        queue.add(message);
+        System.out.println("Produced: " + message);
+
+        // Signal consumer threads that data is available
+        notifyAll();
+    }
+
+    // Consumer method
+    public synchronized String consume() throws InterruptedException {
+        // ALWAYS use a while loop to handle spurious wakeups
+        while (queue.isEmpty()) {
+            System.out.println("Queue empty. Consumer waiting...");
+            wait(); // Releases monitor lock and suspends execution
+        }
+
+        String message = queue.poll();
+        System.out.println("Consumed: " + message);
+
+        // Signal producer threads that space is available
+        notifyAll();
+        return message;
+    }
+}
+
+class WaitNotifyDemo {
+    public static void main(String[] args) {
+        MessageQueue mq = new MessageQueue(2);
+
+        Thread producer = new Thread(() -> {
+            try {
+                mq.produce("Msg 1");
+                mq.produce("Msg 2");
+                mq.produce("Msg 3"); // Will wait until consumer reads
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+
+        Thread consumer = new Thread(() -> {
+            try {
+                Thread.sleep(1000); // Small delay to let producer fill queue
+                mq.consume();
+                mq.consume();
+                mq.consume();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+
+        producer.start();
+        consumer.start();
+    }
+}
+----
+
+== Concurrent Adders and Accumulators in Java
+
+When dozens or hundreds of threads concurrently update a single atomic variable like `AtomicLong`, performance drops significantly. This degradation happens because CPU cores continually spin and retry failed **Compare-And-Swap (CAS)** operations on the exact same cache line—a bottleneck known as **CAS contention**.
+
+To solve this, Java 8 introduced **Adders** (`LongAdder`, `DoubleAdder`) and **Accumulators** (`LongAccumulator`, `DoubleAccumulator`). Instead of forcing all threads to compete for a single memory location, Adders maintain an internal dynamically-sized array of **Cells**.
+
+<Image src="image_agent_tag_2763712890429464845" alt="Diagram showing LongAdder architecture with threads updating individual array cells to eliminate CAS contention before combining for the final sum" caption="LongAdder architecture: Distributing thread updates across an internal Cell array eliminates contention" />
+
+=== How Adders Eliminate CAS Contention
+
+* **Low Contention:** Threads update a shared `base` variable using standard atomic operations.
+* **High Contention:** When CAS conflicts occur on the `base` value, the structure dynamically allocates an array of `Cell` objects (padded to avoid CPU cache line false sharing). Threads are hashed to distinct cells, allowing updates to proceed concurrently without blocking or retrying.
+* **Sum / Read Phase:** Calling `sum()` aggregates the `base` variable and all array cells to compute the snapshot total.
+
+---
+
+=== `AtomicLong` vs. `LongAdder` vs. `LongAccumulator`
+
+[cols="1,2,2", options="header"]
+|===
+| Class | Mechanics | Primary Use Case
+| **`AtomicLong`** | Single shared `volatile long` updated via CAS loops. | Low to moderate contention, or when atomic "compare-and-set" / "get-and-set" semantics are strictly required.
+| **`LongAdder`** | Stripped/Partitioned array of cell variables (`sum()`). | High-throughput concurrent additions (e.g., metrics, counters, request tracking).
+| **`LongAccumulator`** | Generalized version of `LongAdder` supporting custom associative side-effect-free functions (e.g., `min`, `max`, `product`). | High-throughput custom reduction operations across threads.
+|===
+
+[NOTE]
+====
+`LongAdder` sacrifices exact atomic snapshot reads. Calling `sum()` returns a point-in-time value, but it is **not an atomic snapshot** if threads are actively mutating the adder during the sum calculation.
+====
+
+---
+
+=== Code Example: High-Throughput Counter and Custom Accumulator
+
+[source,java]
+----
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.DoubleAccumulator;
+import java.util.concurrent.atomic.LongAdder;
+
+class AddersDemo {
+    public static void main(String[] args) throws InterruptedException {
+        // 1. LongAdder: Preferred for high-concurrency counters
+        LongAdder requestCounter = new LongAdder();
+
+        // 2. LongAccumulator / DoubleAccumulator: Custom functions (e.g., tracking max value)
+        // Combines values using Math::max starting at initial identity value Double.NEGATIVE_INFINITY
+        DoubleAccumulator maxTemperatureTracker = new DoubleAccumulator(Math::max, Double.NEGATIVE_INFINITY);
+
+        // Simulate 10 concurrent worker threads submitting updates
+        try (ExecutorService executor = Executors.newFixedThreadPool(10)) {
+            for (int i = 0; i < 100; i++) {
+                final double tempReading = 20.0 + (i * 0.5);
+                executor.submit(() -> {
+                    requestCounter.increment();            // Fast lock-free partitioned addition
+                    maxTemperatureTracker.accumulate(tempReading); // Computes max via side-effect-free operation
+                });
+            }
+        } // Executor service auto-shutdown waits for completion
+
+        System.out.println("Total Processed Requests: " + requestCounter.sum()); // 100
+        System.out.println("Maximum Recorded Temp:   " + maxTemperatureTracker.get()); // 69.5
+    }
+}
+----
+
+== Synchronized Collections vs. Concurrent Collections in Java
+
+When multiple threads access collection structures concurrently, using standard implementations like `ArrayList` or `HashMap` leads to state corruption and unpredictable behavior. Java provides two distinct approaches to thread-safe collections: **Synchronized Collections** (legacy/coarse-grained) and **Concurrent Collections** (modern/fine-grained).
+
+=== Core Architectural Comparison
+
+[cols="1,2,2", options="header"]
+|===
+| Dimension | Synchronized Collections (`Collections.synchronizedX`) | Concurrent Collections (`java.util.concurrent.*`)
+| **Locking Strategy** | **Collection-level locking:** Wraps standard collection with a single, synchronized lock guarding every operation. | **Fine-grained / Lock-Free:** Uses lock striping, bucket-level locking, atomic CAS operations, or copy-on-write mechanisms.
+| **Throughput** | **Low under high concurrency:** Threads serialize; only one thread can read or write at a time. | **High under high concurrency:** Multiple threads can read and write simultaneously without blocking each other.
+| **Iteration Behavior** | **Fail-Fast:** Iterators throw `ConcurrentModificationException` if modified during iteration without explicit manual locking on the collection. | **Weakly Consistent / Snapshot:** Iterators reflect the state at or since creation without throwing `ConcurrentModificationException`.
+| **Compound Operations** | Requires external client-side synchronization for atomic "check-then-act" operations (e.g., `putIfAbsent`). | Provides built-in atomic compound methods directly on the interface (`putIfAbsent`, `replace`, `remove`).
+|===
+
+---
+
+=== Key Concurrent Collection Classes
+
+Java's `java.util.concurrent` package offers specialized implementations optimized for specific workload profiles:
+
+[cols="1,2,2", options="header"]
+|===
+| Class | Mechanics | Primary Use Case
+| **`ConcurrentHashMap`** | Bucket-level CAS/synchronized nodes with volatile reads. | General-purpose high-throughput key-value store.
+| **`CopyOnWriteArrayList`** | Creates a fresh copy of the underlying array on every write mutation (`add`, `set`). | Read-heavy workloads with rare writes (e.g., event listener lists).
+| **`ConcurrentLinkedQueue`** | Lock-free thread-safe queue using CAS operations on linked nodes. | High-performance unbounded FIFO task queue.
+| **`BlockingQueue` implementations** | Uses condition locks to block readers when empty and writers when full (`ArrayBlockingQueue`, `LinkedBlockingQueue`). | Producer-consumer architectures and thread pool work queues.
+| **`ConcurrentSkipListMap`** | Lock-free concurrent skip list implementation providing sorted key ordering. | Thread-safe alternative to `TreeMap`.
+|===
+
+---
+
+=== Code Example: Iteration and Atomic Compound Operations
+
+[source,java]
+----
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+class CollectionsConcurrencyDemo {
+    public static void main(String[] args) {
+        // -------------------------------------------------------------
+        // 1. Synchronized Map vs ConcurrentHashMap
+        // -------------------------------------------------------------
+        Map<String, Integer> syncMap = Collections.synchronizedMap(new HashMap<>());
+        ConcurrentHashMap<String, Integer> concurrentMap = new ConcurrentHashMap<>();
+
+        // Atomic compound operation on ConcurrentHashMap (no manual locking required)
+        concurrentMap.putIfAbsent("Key1", 100);
+        concurrentMap.computeIfPresent("Key1", (k, v) -> v + 50); // Thread-safe atomic update
+        System.out.println("ConcurrentMap value: " + concurrentMap.get("Key1")); // 150
+
+        // Synchronized map requires manual synchronization for thread-safe compound actions/iteration
+        synchronized (syncMap) {
+            if (!syncMap.containsKey("Key1")) {
+                syncMap.put("Key1", 100);
+            }
+        }
+
+        // -------------------------------------------------------------
+        // 2. Safe Iteration without ConcurrentModificationException
+        // -------------------------------------------------------------
+        List<String> list = new CopyOnWriteArrayList<>(List.of("A", "B", "C"));
+
+        // Modifying CopyOnWriteArrayList during iteration does NOT throw exception
+        for (String item : list) {
+            if (item.equals("B")) {
+                list.add("D"); // Safe: operates on a fresh array copy
+            }
+        }
+        System.out.println("CopyOnWriteArrayList after iteration edit: " + list); // [A, B, C, D]
+    }
+}
+----

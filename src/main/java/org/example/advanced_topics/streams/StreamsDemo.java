@@ -1,20 +1,17 @@
-package org.example.advanced_topics.Streams;
+package org.example.advanced_topics.streams;
 
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Comparator;
-import java.util.List;
-import java.util.stream.Stream;
+import java.util.*;
+import java.util.stream.IntStream;
 
 public class StreamsDemo {
     public static void show() {
         List<Movie> movies = List.of(
-                new Movie("b", 10),
-                new Movie("b_repeated", 10),
-                new Movie("a_repeated", 10),
-                new Movie("c", 20),
-                new Movie("c_repeated", 20),
-                new Movie("a", 100)
+                new Movie("b", 10, Genre.ACTION),
+                new Movie("b_repeated", 10, Genre.THRILLER),
+                new Movie("a_repeated", 10, Genre.ACTION),
+                new Movie("c", 20, Genre.COMEDY),
+                new Movie("c_repeated", 20, Genre.THRILLER),
+                new Movie("a", 100, Genre.COMEDY)
         );
 
 //        // Imperative programming
@@ -134,6 +131,90 @@ public class StreamsDemo {
 //        movies.stream()
 //                .count();
 
-        
+        // General reducers -> we use the reduce method
+//        Optional<Integer> sum = movies.stream()
+//                .map(Movie::getLikes)
+//                //.reduce((a, b) -> a + b);  this lambda does the same as the method reference in the following code line
+//                        .reduce(Integer::sum);
+//
+//        // The second implementation of the reduce method accept 2 arguments, the first a initial value, the second the lambda or sum method reference, and it returns a Integer object instead of a Optional object
+//        Integer sum2 = movies.stream()
+//                        .map(Movie::getLikes)
+//                                .reduce(0, Integer::sum);
+//
+//        System.out.println("Sum 1: " + sum.orElse(0));
+//        System.out.println("Sum 2: " + sum2);
+
+        // Stream Collectors -> we use the collect method and its different implementations in order to convert a stream result into a collection like a list, a set, a map and so on.
+//        var setResult = movies.stream()
+//                .filter(m -> m.getLikes() > 5)
+//                .collect(Collectors.toSet());
+//
+//        // We want to convert a stream into a hashmap
+//        // key (title)
+//        // value (likes)
+//        var mapResult = movies.stream()
+//                .filter(m -> m.getLikes() > 19)
+//                .collect(Collectors.toMap(Movie::getTitle, Movie::getLikes));
+//        setResult.forEach(System.out::println);
+//        System.out.println(mapResult);
+//
+//        // Another way of summing elements -> we use the summing method, this has an implementation for every primitive data type, like summingInt, summingDouble, and so on
+//        var result = movies.stream()
+//                .collect(Collectors.summingInt(Movie::getLikes));
+//        System.out.println(result);
+//
+//        // The summarizing method -> we use it to obtain statistics
+//        var statisticsResult = movies.stream()
+//                .collect(Collectors.summarizingInt(Movie::getLikes));
+//        System.out.println(statisticsResult);
+//
+//        // The joining method -> we use it to for example get names and combine them using a comma
+//        var joinResult = movies.stream()
+//                .filter(m -> m.getLikes() > 5)
+//                .map(Movie::getTitle)
+//                .collect(Collectors.joining(", "));
+//        System.out.println(joinResult);
+
+        // Grouping elements -> we use them to group or classify our data
+        // For example we want to group by movie genre
+//        var result1 = movies.stream()
+//                .collect(Collectors.groupingBy(Movie::getGenre));
+//        System.out.println(result1);
+//
+//        // The other 2nd implementation of the groupingBy method allows us to specify the classifier and the Collector type, for example collect it into a set, map, count the number
+//        // of elements in each category, joining and so on
+//        var result2 = movies.stream()
+//                .collect(Collectors.groupingBy(
+//                        Movie::getGenre, Collectors.counting() // In this case we count the number of elements in each category
+//                ));
+//        System.out.println(result2);
+//
+//        // example joining elements
+//        var result3 = movies.stream()
+//                .collect(Collectors.groupingBy(
+//                        Movie::getGenre, Collectors.mapping(
+//                                Movie::getTitle,
+//                                Collectors.joining(", ")
+//                        )));
+//        System.out.println(result3);
+
+        // Partitioning elements
+        // For example we have the condition and we have to partition our movies into two categories, movies that have more than 20 likes and movies that have fewer than 20 likes
+//        var result = movies.stream()
+//                .collect(Collectors.partitioningBy(
+//                        m -> m.getLikes() > 20,
+//                        Collectors.mapping(Movie::getTitle,
+//                                Collectors.joining(", "))));
+//        System.out.println(result);
+
+        // Primitive type streams -> The stream API has different implementations for the different primitive data types
+        // For example a int stream. This implementations add two new methods, the range and rangeClosed methods, the rangeClosed method, accept 2 parameters, the initial and final number and the final number
+        IntStream.rangeClosed(1, 10)
+                .forEach(System.out::println);
+
+        // With the range method, the final number is excluded
+        IntStream.range(1, 10)
+                .forEach(System.out::println);
     }
 }

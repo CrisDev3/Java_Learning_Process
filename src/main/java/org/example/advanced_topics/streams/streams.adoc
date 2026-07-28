@@ -673,3 +673,390 @@ class SimpleReducersDemo {
 }
 ----
 
+== Stream Collectors in Java
+
+While simple reducers collapse stream elements into a single value, **Collectors** (`java.util.stream.Collectors`) are terminal operations that accumulate elements into mutable containers—such as collections, maps, strings, or complex hierarchical aggregations.
+
+Driven by the `collect(Collector)` terminal operation, the utility class `Collectors` provides factory methods for accumulating, transforming, and grouping stream data.
+
+<Image src="image_agent_tag_9186074442401529655" alt="Hierarchy tree showing Stream collect options including Collections, Strings, Maps, and Downstream Collectors" caption="Categories of stream collection operations available in the Collectors utility class" />
+
+=== Core Collector Categories
+
+[cols="1,2,2", options="header"]
+|===
+| Category | Collector Factory Method | Primary Use Case
+| **Collections** | **`toList()`**, **`toUnmodifiableList()`** | Collects elements into standard or immutable `List` structures.
+| **Collections** | **`toSet()`**, **`toCollection(Supplier)`** | Collects into `Set` or specific implementations (e.g., `TreeSet`).
+| **String Joining** | **`joining(delimiter, prefix, suffix)`** | Concatenates `CharSequence` elements into a formatted string.
+| **Summarizing** | **`counting()`**, **`summarizingInt()`** | Computes statistical summaries (count, sum, min, max, average).
+| **Key-Value Mapping**| **`toMap(keyMapper, valueMapper)`** | Builds a `Map<K, V>` with optional collision resolution handlers.
+| **Grouping & Partitioning** | **`groupingBy()`**, **`partitioningBy()`** | Categorizes elements into `Map` structures using classification functions.
+|===
+
+---
+
+=== Advanced Aggregations: `groupingBy()` and `partitioningBy()`
+
+* **`groupingBy(classifier)`:** Groups elements by an arbitrary key function into a `Map<K, List<T>>` (similar to SQL `GROUP BY`).
+* **`groupingBy(classifier, downstream)`:** Applies a secondary "downstream" collector to process values within each group (e.g., counting, averaging, mapping).
+* **`partitioningBy(predicate)`:** A specialized grouping method that splits elements into a `Map<Boolean, List<T>>` based on a boolean condition (`true` vs. `false`).
+
+---
+
+=== Code Example: Collections, String Joining, and Grouping
+
+[source,java]
+----
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.stream.Collectors;
+
+class Employee {
+    private String name;
+    private String department;
+    private double salary;
+
+    public Employee(String name, String department, double salary) {
+        this.name = name;
+        this.department = department;
+        this.salary = salary;
+    }
+
+    public String getName() { return name; }
+    public String getDepartment() { return department; }
+    public double getSalary() { return salary; }
+
+    @Override
+    public String toString() { return name; }
+}
+
+class CollectorsDemo {
+    public void executeExamples() {
+        List<Employee> staff = List.of(
+            new Employee("Alice", "Engineering", 95000),
+            new Employee("Bob", "Marketing", 55000),
+            new Employee("Charlie", "Engineering", 120000),
+            new Employee("Diana", "HR", 60000)
+        );
+
+        // 1. Collecting into specific Collections and String Joining
+        Set<String> uniqueDepts = staff.stream()
+                                       .map(Employee::getDepartment)
+                                       .collect(Collectors.toCollection(TreeSet::new));
+
+        String namesCsv = staff.stream()
+                               .map(Employee::getName)
+                               .collect(Collectors.joining(", ", "[", "]"));
+
+        System.out.println("Sorted Departments: " + uniqueDepts);
+        System.out.println("Formatted Names: " + namesCsv); // [Alice, Bob, Charlie, Diana]
+
+        // 2. Grouping By Department: Map<String, List<Employee>>
+        Map<String, List<Employee>> byDept = staff.stream()
+            .collect(Collectors.groupingBy(Employee::getDepartment));
+        System.out.println("Employees by Dept: " + byDept);
+
+        // 3. Grouping with Downstream Collector: Average Salary per Dept
+        Map<String, Double> avgSalaryByDept = staff.stream()
+            .collect(Collectors.groupingBy(
+                Employee::getDepartment,
+                Collectors.averagingDouble(Employee::getSalary)
+            ));
+        System.out.println("Avg Salary by Dept: " + avgSalaryByDept);
+
+        // 4. Partitioning By Salary Threshold: Map<Boolean, List<Employee>>
+        Map<Boolean, List<Employee>> highEarners = staff.stream()
+            .collect(Collectors.partitioningBy(e -> e.getSalary() >= 80000));
+        System.out.println("High Earners (>= $80k): " + highEarners.get(true));
+    }
+}
+----
+
+== Grouping Elements in Java Streams
+
+Grouping is one of the most powerful terminal collection operations in the Stream API. Performed via the **`Collectors.groupingBy()`** and **`Collectors.partitioningBy()`** collector factories, grouping allows you to categorize stream elements into a `Map` structure based on a classifier function or predicate—similar to a SQL `GROUP BY` clause.
+
+=== `groupingBy()` vs. `partitioningBy()`
+
+[cols="1,2,2", options="header"]
+|===
+| Collector | Key Type | Behavior
+| **`groupingBy(classifier)`** | Any object type (`K`) | Groups elements into `Map<K, List<T>>` based on the value returned by the classification function.
+| **`partitioningBy(predicate)`** | `Boolean` (`true` / `false`) | Splits elements into a `Map<Boolean, List<T>>` with exactly two keys based on whether they satisfy a predicate.
+|===
+
+---
+
+=== Downstream Collectors: Nested Aggregations
+
+Beyond simple 1-to-list mappings, `groupingBy` allows you to pass a **downstream collector** as a second argument. This computes a summary value or secondary grouping for each bucket rather than returning a raw list of elements.
+
+Common downstream collectors include:
+
+* **`Collectors.counting()`:** Counts elements in each group $\rightarrow$ `Map<K, Long>`
+* **`Collectors.averagingDouble()` / `summingInt()`:** Calculates averages or sums per group
+* **`Collectors.mapping()`:** Applies a transformation before collecting group values
+* **`Collectors.maxBy()` / `minBy()`:** Finds extreme values per group $\rightarrow$ `Map<K, Optional<T>>`
+* **`Collectors.toSet()`:** Collects elements in each group into a `Set` instead of a `List`
+
+---
+
+=== Code Example: Classification, Partitioning, and Downstream Aggregations
+
+[source,java]
+----
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+class Employee {
+    private String name;
+    private String department;
+    private double salary;
+
+    public Employee(String name, String department, double salary) {
+        this.name = name;
+        this.department = department;
+        this.salary = salary;
+    }
+
+    public String getName() { return name; }
+    public String getDepartment() { return department; }
+    public double getSalary() { return salary; }
+
+    @Override
+    public String toString() { return name + " ($" + salary + ")"; }
+}
+
+class GroupingElementsDemo {
+    public void executeExamples() {
+        List<Employee> staff = List.of(
+            new Employee("Alice", "Engineering", 95000),
+            new Employee("Bob", "Marketing", 55000),
+            new Employee("Charlie", "Engineering", 120000),
+            new Employee("Diana", "HR", 60000),
+            new Employee("Eve", "Marketing", 75000)
+        );
+
+        // 1. Basic Grouping: Map<String, List<Employee>>
+        Map<String, List<Employee>> byDept = staff.stream()
+            .collect(Collectors.groupingBy(Employee::getDepartment));
+        System.out.println("By Department: " + byDept);
+
+        // 2. Grouping with Downstream Counting: Map<String, Long>
+        Map<String, Long> countByDept = staff.stream()
+            .collect(Collectors.groupingBy(
+                Employee::getDepartment,
+                Collectors.counting()
+            ));
+        System.out.println("Employee Count per Dept: " + countByDept);
+
+        // 3. Grouping + Mapping: Map<String, Set<String>> (Dept -> Employee Names)
+        Map<String, Set<String>> namesByDept = staff.stream()
+            .collect(Collectors.groupingBy(
+                Employee::getDepartment,
+                Collectors.mapping(Employee::getName, Collectors.toSet())
+            ));
+        System.out.println("Names per Dept: " + namesByDept);
+
+        // 4. Downstream Extremes: Highest earner in each department
+        Map<String, Optional<Employee>> topEarnerByDept = staff.stream()
+            .collect(Collectors.groupingBy(
+                Employee::getDepartment,
+                Collectors.maxBy(Comparator.comparingDouble(Employee::getSalary))
+            ));
+        System.out.println("Top Earner per Dept: " + topEarnerByDept);
+
+        // 5. Partitioning By Predicate: Map<Boolean, List<Employee>>
+        Map<Boolean, List<Employee>> highSalaryPartition = staff.stream()
+            .collect(Collectors.partitioningBy(e -> e.getSalary() >= 80000));
+        System.out.println("Earns >= 80k: " + highSalaryPartition.get(true));
+        System.out.println("Earns < 80k: "  + highSalaryPartition.get(false));
+    }
+}
+----
+
+== Partitioning Elements in Java Streams
+
+**Partitioning** is a specialized form of grouping provided by **`Collectors.partitioningBy()`**. While standard grouping categorizes stream elements into an arbitrary number of keys using a classifier function, partitioning splits elements into **exactly two groups** based on a boolean `Predicate`.
+
+The resulting collection is always a `Map<Boolean, List<T>>` containing two keys: **`true`** (elements matching the condition) and **`false`** (elements failing the condition).
+
+=== `partitioningBy()` vs. `groupingBy()`
+
+[cols="1,2,2", options="header"]
+|===
+| Dimension | `partitioningBy()` | `groupingBy()`
+| **Key Type** | Always `Boolean` (`true` or `false`). | Any object type `K` returned by the classifier.
+| **Key Count** | Always exactly **2 keys** in the map. | Variable number of keys (0 to $N$).
+| **Empty Groups** | Guaranteed to contain both `true` and `false` keys, even if a group is empty (`List` size 0). | Keys without matching elements are omitted from the map.
+| **Performance** | Optimized internally for two-state boolean splitting. | General-purpose hash/tree bucket lookup.
+|===
+
+---
+
+=== Downstream Partitioning
+
+Just like `groupingBy()`, `partitioningBy()` supports an overloaded version that accepts a **downstream collector**. This allows you to perform secondary aggregations—such as counting, averaging, or collecting into specific structures—on each boolean partition.
+
+* **`Collectors.partitioningBy(predicate)`** $\rightarrow$ `Map<Boolean, List<T>>`
+* **`Collectors.partitioningBy(predicate, downstream)`** $\rightarrow$ `Map<Boolean, D>`
+
+---
+
+=== Code Example: Basic Partitioning, Downstream Aggregations, and Counting
+
+[source,java]
+----
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+class Student {
+    private final String name;
+    private final int score;
+
+    public Student(String name, int score) {
+        this.name = name;
+        this.score = score;
+    }
+
+    public String getName() { return name; }
+    public int getScore() { return score; }
+
+    @Override
+    public String toString() { return name + " (" + score + ")"; }
+}
+
+class PartitioningElementsDemo {
+    public void executeExamples() {
+        List<Student> students = List.of(
+            new Student("Alice", 85),
+            new Student("Bob", 55),
+            new Student("Charlie", 92),
+            new Student("Diana", 48),
+            new Student("Eve", 70)
+        );
+
+        // 1. Basic Partitioning: Map<Boolean, List<Student>>
+        // Splitting into Passing (>= 60) vs. Failing (< 60)
+        Map<Boolean, List<Student>> passingStatus = students.stream()
+            .collect(Collectors.partitioningBy(s -> s.getScore() >= 60));
+
+        System.out.println("Passed: " + passingStatus.get(true));
+        // Output: [Alice (85), Charlie (92), Eve (70)]
+
+        System.out.println("Failed: " + passingStatus.get(false));
+        // Output: [Bob (55), Diana (48)]
+
+        // 2. Partitioning with Downstream Counting: Map<Boolean, Long>
+        Map<Boolean, Long> passFailCounts = students.stream()
+            .collect(Collectors.partitioningBy(
+                s -> s.getScore() >= 60,
+                Collectors.counting()
+            ));
+
+        System.out.println("Pass Count: " + passFailCounts.get(true));  // 3
+        System.out.println("Fail Count: " + passFailCounts.get(false)); // 2
+
+        // 3. Partitioning with Downstream Mapping to Set: Map<Boolean, Set<String>>
+        Map<Boolean, Set<String>> studentNamesByPass = students.stream()
+            .collect(Collectors.partitioningBy(
+                s -> s.getScore() >= 60,
+                Collectors.mapping(Student::getName, Collectors.toSet())
+            ));
+
+        System.out.println("Passed Names: " + studentNamesByPass.get(true));
+        // Output: [Alice, Charlie, Eve]
+    }
+}
+----
+
+== Primitive Type Streams in Java
+
+When working with generic streams like `Stream<Integer>` or `Stream<Double>`, Java automatically wraps primitive values into their corresponding wrapper objects (e.g., `int` to `Integer`). This process—known as **auto-boxing**—introduces significant memory overhead and garbage collection pressure in high-performance pipelines.
+
+To eliminate boxing overhead, Java provides three specialized, unboxed primitive stream abstractions in `java.util.stream`:
+
+<Image src="image_agent_tag_16905725521211418342" alt="Diagram showing primitive streams IntStream LongStream DoubleStream bypassing wrapper object overhead" caption="Primitive streams work with unboxed values to optimize memory and performance" />
+
+=== Core Primitive Stream Abstractions
+
+[cols="1,2,2", options="header"]
+|===
+| Primitive Stream | Native Type | Specialty Operations
+| **`IntStream`** | `int` | `sum()`, `average()`, `range()`, `rangeClosed()`, `summaryStatistics()`
+| **`LongStream`** | `long` | `sum()`, `average()`, `range()`, `rangeClosed()`, `summaryStatistics()`
+| **`DoubleStream`** | `double` | `sum()`, `average()`, `summaryStatistics()`
+|===
+
+---
+
+=== Converting Between Object and Primitive Streams
+
+Switching between object streams (`Stream<T>`) and primitive streams allows you to tap into specialized mathematical functions when needed, then transition back to generic streams:
+
+* **Object to Primitive:** `mapToInt()`, `mapToLong()`, `mapToDouble()`
+* **Primitive to Object:** `boxed()` (wraps values into `Stream<T>`) or `mapToObj(IntFunction<T>)`
+
+---
+
+=== Numerical Range Generation and Summary Statistics
+
+Primitive streams offer convenient factory methods for generating numerical sequences and calculating complete statistical summaries in a single pass:
+
+* **`IntStream.range(a, b)`:** Generates numbers from `a` to `b - 1` (exclusive end).
+* **`IntStream.rangeClosed(a, b)`:** Generates numbers from `a` to `b` (inclusive end).
+* **`summaryStatistics()`:** Returns a `SummaryStatistics` object containing `count`, `sum`, `min`, `average`, and `max`.
+
+---
+
+=== Code Example: Primitive Pipeline, Ranges, and Statistics
+
+[source,java]
+----
+import java.util.IntSummaryStatistics;
+import java.util.List;
+import java.util.stream.IntStream;
+
+class PrimitiveStreamsDemo {
+    public void executeExamples() {
+        // 1. Converting Object Stream to Primitive Stream (mapToInt)
+        List<String> items = List.of("apple", "banana", "cherry");
+
+        int totalLength = items.stream()
+                               .mapToInt(String::length) // Stream<String> -> IntStream
+                               .sum();                   // Direct primitive summation
+        System.out.println("Total Characters: " + totalLength); // 17
+
+        // 2. Generating Numeric Ranges
+        int rangeSum = IntStream.rangeClosed(1, 10).sum(); // 1 + 2 + ... + 10
+        System.out.println("Range Sum (1-10): " + rangeSum); // 55
+
+        // 3. Boxing Primitive Stream Back to Object Stream
+        List<Integer> evenNumbers = IntStream.rangeClosed(1, 10)
+                                             .filter(n -> n % 2 == 0)
+                                             .boxed() // IntStream -> Stream<Integer>
+                                             .toList();
+        System.out.println("Even Numbers: " + evenNumbers); // [2, 4, 6, 8, 10]
+
+        // 4. Single-Pass Statistical Summary
+        IntSummaryStatistics stats = IntStream.of(23, 45, 12, 89, 67, 34)
+                                              .summaryStatistics();
+
+        System.out.println("--- Summary Statistics ---");
+        System.out.println("Count:   " + stats.getCount());   // 6
+        System.out.println("Sum:     " + stats.getSum());     // 270
+        System.out.println("Min:     " + stats.getMin());     // 12
+        System.out.println("Average: " + stats.getAverage()); // 45.0
+        System.out.println("Max:     " + stats.getMax());     // 89
+    }
+}
+----
