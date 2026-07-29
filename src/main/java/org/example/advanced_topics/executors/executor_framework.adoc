@@ -1,0 +1,724 @@
+== Thread Pools and the Executor Framework in Java
+
+Creating and destroying native threads on demand is expensive in terms of CPU overhead and memory footprint (each thread allocates its own call stack, typically ~1 MB). Additionally, unbounded thread creation can quickly exhaust system resources, leading to `OutOfMemoryError` crashes.
+
+To solve this, Java introduced the **Executor Framework** (`java.util.concurrent`), which decouples task submission from task execution using **Thread Pools**.
+
+=== Core Components of the Executor Framework
+
+[cols="1,2,2", options="header"]
+|===
+| Interface / Class | Responsibility | Key Methods
+| **`Executor`** | Simple top-level interface for submitting tasks. | `execute(Runnable)`
+| **`ExecutorService`** | Subinterface adding lifecycle management, shutdown controls, and task result tracking. | `submit()`, `shutdown()`, `invokeAll()`, `awaitTermination()`
+| **`ThreadPoolExecutor`** | Core customizable implementation of `ExecutorService`. | Configurable core pool size, max pool size, keep-alive time, and work queue.
+| **`Executors`** | Utility factory class providing pre-configured thread pool instances. | `newFixedThreadPool()`, `newCachedThreadPool()`, `newSingleThreadExecutor()`
+|===
+
+---
+
+=== Common Thread Pool Factory Methods (`Executors`)
+
+[cols="1,2,2", options="header"]
+|===
+| Factory Method | Pool Behavior | Recommended Use Case
+| **`newFixedThreadPool(n)`** | Fixed number of `n` threads processing tasks from an unbounded `LinkedBlockingQueue`. | CPU-bound tasks or predictable, bounded workload volumes.
+| **`newCachedThreadPool()`** | Dynamic pool size (0 to infinity) using a `SynchronousQueue`. Reuses idle threads or creates new ones as needed; idle threads expire after 60s. | Short-lived, asynchronous I/O-bound tasks with fluctuating traffic.
+| **`newSingleThreadExecutor()`** | Exactly 1 worker thread with an unbounded queue. | Sequential task execution where strict order must be preserved.
+| **`newScheduledThreadPool(n)`** | Fixed pool capable of executing tasks periodically or after a delay. | Cron-like scheduled background tasks, heartbeats, and cleanup jobs.
+| **`newWorkStealingPool()`** | ForkJoinPool based on available processors where idle threads "steal" work from busy queues. | Divide-and-conquer recursive parallel processing.
+|===
+
+[CAUTION]
+====
+In production environments, avoid using `Executors.newFixedThreadPool()` or `Executors.newCachedThreadPool()` blindly. `newFixedThreadPool` uses an unbounded queue (`LinkedBlockingQueue`), which can cause an `OutOfMemoryError` under heavy load. `newCachedThreadPool` creates unbounded threads, which can cause CPU/Memory exhaustion. Instantiate `ThreadPoolExecutor` directly with bounded queues and custom rejection policies instead!
+====
+
+---
+
+=== Code Example: Creating, Submitting Tasks, and Shutting Down a Pool
+
+[source,java]
+----
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+
+class ThreadPoolsDemo {
+    public static void main(String[] args) {
+        // Create a fixed thread pool with 3 worker threads
+        ExecutorService executor = Executors.newFixedThreadPool(3);
+
+        try {
+            // 1. Submitting a Runnable (Fire-and-forget task with no return value)
+            executor.execute(() -> {
+                System.out.println("Runnable task executing on: " + Thread.currentThread().getName());
+            });
+
+            // 2. Submitting a Callable (Task that returns a result and can throw checked exceptions)
+            Callable<Integer> calculateTask = () -> {
+                System.out.println("Callable task calculating on: " + Thread.currentThread().getName());
+                TimeUnit.MILLISECONDS.sleep(500);
+                return 42;
+            };
+
+            // Future represents the pending result of the asynchronous computation
+            Future<Integer> futureResult = executor.submit(calculateTask);
+
+            // Blocks main thread until the computation is complete
+            Integer result = futureResult.get();
+            System.out.println("Result received from Future: " + result);
+
+        } catch (InterruptedException | ExecutionException e) { // Corregido: sin barra invertida
+            System.err.println("Task execution failed or was interrupted.");
+        } finally {
+            // 3. Proper Thread Pool Shutdown Pattern
+            shutdownGracefully(executor);
+        }
+    }
+
+    private static void shutdownGracefully(ExecutorService executor) {
+        System.out.println("Initiating pool shutdown...");
+        executor.shutdown(); // Disable new tasks from being submitted
+        try {
+            // Wait up to 5 seconds for existing tasks to terminate
+            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                executor.shutdownNow(); // Cancel currently executing tasks forcibly
+            }
+        } catch (InterruptedException e) {
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
+}
+----
+
+== Executors and Custom ThreadPoolExecutor Tuning in Java
+
+While factory methods in `java.util.concurrent.Executors` (like `newFixedThreadPool()`) are convenient, production microservices often avoid them. Default factory configurations use unbounded work queues or unbounded thread creation, which can easily lead to memory or CPU exhaustion under heavy load.
+
+For production-grade applications, instantiate **`ThreadPoolExecutor`** directly to set explicit bounds on pool growth, queue sizing, and task rejection handling.
+
+=== Anatomy of a `ThreadPoolExecutor`
+
+To configure a `ThreadPoolExecutor`, you specify seven core parameters:
+
+<Image src="image_agent_tag_8471987514109154445" alt="Diagram showing ThreadPoolExecutor task lifecycle: Task submission, Core Pool Size check, Blocking Work Queue insertion, Max Pool Size fallback, and Rejection Policy trigger" caption="Task submission flow in ThreadPoolExecutor from core threads to work queue to saturation policy" />
+
+[cols="1,2,2", options="header"]
+|===
+| Parameter | Description | Recommended Production Setting
+| **`corePoolSize`** | Base number of threads to keep alive, even when idle. | Set based on CPU cores for compute tasks or expected concurrent I/O baselines.
+| **`maximumPoolSize`** | Upper limit on total threads created when the queue fills up. | Hard ceiling to prevent CPU thrashing or system resource depletion.
+| **`keepAliveTime`** | Max time excess idle threads (above `corePoolSize`) wait before terminating. | 30s to 60s for bursty workloads.
+| **`unit`** | Time unit for `keepAliveTime` (`TimeUnit.SECONDS`, etc.). | Match expected workload recovery duration.
+| **`workQueue`** | Queue holding tasks before core threads pick them up. | **Bounded queue** like `ArrayBlockingQueue(N)` or bounded `LinkedBlockingQueue(N)`.
+| **`threadFactory`** | Factory used to create new worker threads. | Custom factory that assigns descriptive thread names and daemon statuses.
+| **`handler`** | Policy executed when the queue is full and `maximumPoolSize` is reached. | Choose a **Rejection Policy** matched to your failure recovery strategy.
+|===
+
+---
+
+=== Predefined Rejection Policies
+
+When both the work queue and total thread capacity are full, the executor triggers its `RejectedExecutionHandler`:
+
+[cols="1,2,2", options="header"]
+|===
+| Policy Class | Behavior | Use Case
+| **`AbortPolicy`** *(Default)* | Throws `RejectedExecutionException`. | Critical tasks where failures must be explicitly handled by the caller.
+| **`CallerRunsPolicy`** | Executes the task directly on the **calling thread** submitting it. | Backpressure mechanism that slows down the producer rate automatically.
+| **`DiscardPolicy`** | Silently drops the rejected task without an exception. | Non-critical logs, metrics, or telemetry where data loss is acceptable.
+| **`DiscardOldestPolicy`** | Drops the oldest unhandled task from the head of the queue, then retries. | Real-time streaming or UI feeds where newest data supersedes old data.
+|===
+
+---
+
+=== Code Example: Production-Ready Custom Executor
+
+[source,java]
+----
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+
+class CustomExecutorDemo {
+
+    // Custom ThreadFactory to provide clear thread naming for logging/debugging
+    static class NamedThreadFactory implements ThreadFactory {
+        private final String prefix;
+        private final AtomicInteger threadNumber = new AtomicInteger(1);
+
+        public NamedThreadFactory(String prefix) {
+            this.prefix = prefix;
+        }
+
+        @Override
+        public Thread newThread(Runnable r) {
+            Thread t = new Thread(r, prefix + "-Worker-" + threadNumber.getAndIncrement());
+            t.setDaemon(false); // User thread
+            return t;
+        }
+    }
+
+    public static void main(String[] args) throws InterruptedException {
+        int corePoolSize = 2;
+        int maxPoolSize = 4;
+        long keepAliveTime = 30L;
+        int queueCapacity = 5;
+
+        // Constructing a fully bounded ThreadPoolExecutor
+        ThreadPoolExecutor customExecutor = new ThreadPoolExecutor(
+            corePoolSize,
+            maxPoolSize,
+            keepAliveTime,
+            TimeUnit.SECONDS,
+            new ArrayBlockingQueue<>(queueCapacity),             // Bounded Queue
+            new NamedThreadFactory("OrderProcessingService"),   // Named Threads
+            new ThreadPoolExecutor.CallerRunsPolicy()           // Backpressure Rejection
+        );
+
+        System.out.println("Submitting tasks to custom thread pool...");
+
+        // Submit tasks to exceed corePoolSize + queueCapacity
+        for (int i = 1; i <= 12; i++) {
+            final int taskId = i;
+            customExecutor.submit(() -> {
+                System.out.println("Processing Task " + taskId + " on " + Thread.currentThread().getName());
+                try {
+                    TimeUnit.MILLISECONDS.sleep(500);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+        }
+
+        // Graceful Shutdown
+        customExecutor.shutdown();
+        if (customExecutor.awaitTermination(10, TimeUnit.SECONDS)) {
+            System.out.println("All tasks completed successfully.");
+        }
+    }
+}
+----
+
+== `Callable` and `Future` in Java
+
+While `java.lang.Runnable` represents an asynchronous task that executes without returning a result or throwing checked exceptions, real-world tasks often need to produce output or propagate errors.
+
+Java introduced **`Callable<V>`** and **`Future<V>`** (`java.util.concurrent`) to allow tasks to return computed values and throw checked exceptions across thread boundaries.
+
+=== `Runnable` vs. `Callable`
+
+[cols="1,2,2", options="header"]
+|===
+| Interface | Method Signature | Return Value & Exception Handling
+| **`Runnable`** | `public void run()` | Returns **`void`**. Cannot throw checked exceptions (must handle internally).
+| **`Callable<V>`** | `public V call() throws Exception` | Returns a result of type **`V`**. Can throw checked exceptions directly to the caller.
+|===
+
+---
+
+=== Understanding the `Future<V>` Lifecycle
+
+When you submit a `Callable` task to an `ExecutorService`, the service immediately returns a **`Future`** handle. The `Future` acts as a placeholder for a result that will eventually be available after execution finishes.
+
+=== Core Methods on `Future<V>`
+
+[cols="1,2,2", options="header"]
+|===
+| Method | Description | Blocking Behavior
+| **`get()`** | Retrieves the result of the computation. | **Blocking:** Suspends the calling thread indefinitely until the task completes.
+| **`get(timeout, unit)`** | Retrieves the result, but waits at most for the specified time. | **Timed Blocking:** Throws `TimeoutException` if the result isn't ready in time.
+| **`isDone()`** | Returns `true` if the task completed, was cancelled, or threw an exception. | Non-blocking.
+| **`cancel(mayInterruptIfRunning)`** | Attempts to cancel execution of the task. | Non-blocking.
+| **`isCancelled()`** | Returns `true` if this task was cancelled before it completed normally. | Non-blocking.
+|===
+
+[WARNING]
+====
+Calling `future.get()` on a main thread without a timeout converts an asynchronous operation back into a blocking synchronous bottleneck. Always consider using `future.get(timeout, unit)` or upgrading to `CompletableFuture` for non-blocking asynchronous pipelines.
+====
+
+---
+
+=== Code Example: Submitting `Callable` Tasks and Fetching Results
+
+[source,java]
+----
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+
+class CallableAndFutureDemo {
+
+    // Callable task computing a value and throwing potential exceptions
+    static class OrderTotalCalculator implements Callable<Double> {
+        private final String orderId;
+
+        public OrderTotalCalculator(String orderId) {
+            this.orderId = orderId;
+        }
+
+        @Override
+        public Double call() throws Exception {
+            System.out.println("Calculating total for order: " + orderId + " on " + Thread.currentThread().getName());
+
+            // Simulate work or potential validation failure
+            TimeUnit.MILLISECONDS.sleep(800);
+            if ("INVALID".equals(orderId)) {
+                throw new IllegalArgumentException("Invalid order identifier provided!");
+            }
+
+            return 199.99;
+        }
+    }
+
+    public static void main(String[] args) {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        try {
+            Callable<Double> validTask = new OrderTotalCalculator("ORD-101");
+            Callable<Double> invalidTask = new OrderTotalCalculator("INVALID");
+
+            // Submitting tasks returns immediate Future handles
+            Future<Double> validFuture = executor.submit(validTask);
+            Future<Double> invalidFuture = executor.submit(invalidTask);
+
+            System.out.println("Tasks submitted. Doing main thread work while tasks execute...");
+
+            // 1. Fetching valid result with a timeout guard
+            try {
+                Double total = validFuture.get(2, TimeUnit.SECONDS); // Blocks until ready
+                System.out.println("Order Total: $" + total);
+            } catch (TimeoutException e) {
+                System.err.println("Calculation timed out!");
+            }
+
+            // 2. Exception handling on Future tasks
+            try {
+                invalidFuture.get(); // Throws ExecutionException wrapping the underlying cause
+            } catch (ExecutionException e) {
+                System.err.println("Task failed with exception: " + e.getCause().getMessage());
+            }
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            executor.shutdown();
+        }
+    }
+}
+----
+
+== Asynchronous Programming with `CompletableFuture` in Java
+
+Traditional `Future<V>` objects are limited: fetching their results with `.get()` blocks the calling thread, and there is no built-in way to chain tasks or handle exceptions gracefully across asynchronous boundaries.
+
+Introduced in Java 8, **`CompletableFuture<T>`** implements both `Future<T>` and `CompletionStage<T>`. It enables non-blocking, event-driven asynchronous pipelines where tasks trigger upon completion without forcing caller threads to wait.
+
+=== Core Operators in `CompletableFuture`
+
+[cols="1,2,2", options="header"]
+|===
+| Category | Operator Method | Behavior / Use Case
+| **Factory** | `supplyAsync(Supplier)` | Starts an async task returning a value (uses `ForkJoinPool.commonPool()` by default).
+| **Factory** | `runAsync(Runnable)` | Starts an async task with **no return value**.
+| **Transform** | `thenApply(Function)` | Synchronously maps result $T \to U$ on the **same thread** that completed the previous stage.
+| **Transform** | `thenApplyAsync(Function)` | Maps result $T \to U$ asynchronously on a **separate worker thread**.
+| **Chain** | `thenCompose(Function)` | Flattens nested futures (similar to `flatMap`), linking dependent async tasks.
+| **Combine** | `thenCombine(BiFunction)` | Runs two independent futures in parallel and combines their results when both complete.
+| **Exception** | `exceptionally(Function)` | Catches exceptions thrown in upstream stages and provides a fallback value.
+|===
+
+---
+
+=== Synchronous vs. Asynchronous Pipeline Flow
+
+Unlike blocking code, asynchronous pipelines form a execution DAG (Directed Acyclic Graph) where worker threads hand off results through callbacks.
+
+[source,text]
+----
+Fetch User (Async) ──► Fetch Orders (Async) ──┐
+                                             ├──► Combine & Render Result
+Fetch Preferences (Async) -------------------┘
+----
+
+---
+
+=== Code Example: Building a Non-Blocking Async Pipeline
+
+[source,java]
+----
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
+class AsyncPipelineDemo {
+
+    static class User {
+        final String id;
+        final String email;
+        User(String id, String email) { this.id = id; this.email = email; }
+    }
+
+    public static void main(String[] args) {
+        ExecutorService customExecutor = Executors.newFixedThreadPool(3);
+
+        try {
+            System.out.println("Starting non-blocking workflow...");
+
+            // 1. Initiate Async Supply
+            CompletableFuture<Void> pipeline = CompletableFuture.supplyAsync(() -> {
+                System.out.println("Fetching user from DB on: " + Thread.currentThread().getName());
+                sleep(300);
+                return new User("USR-882", "user@example.com");
+            }, customExecutor)
+
+            // 2. Chain Dependent Async Task (thenCompose = flatMap)
+            .thenCompose(user -> fetchUserDiscountAsync(user, customExecutor))
+
+            // 3. Transform Result (thenApply = map)
+            .thenApply(discount -> {
+                System.out.println("Applying tax to discount price on: " + Thread.currentThread().getName());
+                return discount * 1.15; // Calculate final price with tax
+            })
+
+            // 4. Exception Handling
+            .exceptionally(ex -> {
+                System.err.println("Fallback triggered due to error: " + ex.getMessage());
+                return 0.0; // Fallback price
+            })
+
+            // 5. Terminal Consumer Stage
+            .thenAccept(finalPrice -> {
+                System.out.println("Final calculated price: $" + finalPrice);
+            });
+
+            // Main thread continues doing other work without blocking!
+            System.out.println("Main thread is NOT blocked. Doing other work...");
+
+            // Keep app alive briefly to observe async callbacks
+            pipeline.join(); // Block only at end of demo to wait for completion
+
+        } finally {
+            customExecutor.shutdown();
+        }
+    }
+
+    private static CompletableFuture<Double> fetchUserDiscountAsync(User user, ExecutorService executor) {
+        return CompletableFuture.supplyAsync(() -> {
+            System.out.println("Fetching discounts for " + user.email + " on: " + Thread.currentThread().getName());
+            sleep(400);
+            return 85.00; // $85 discounted base
+        }, executor);
+    }
+
+    private static void sleep(long ms) {
+        try { TimeUnit.MILLISECONDS.sleep(ms); } catch (InterruptedException ignored) {}
+    }
+}
+----
+
+== Running Code on Completion in Java (`CompletableFuture`)
+
+When working with asynchronous tasks, you often need to execute cleanup code, log results, or trigger secondary actions once a task finishes—regardless of whether it succeeded or failed.
+
+Rather than blocking with `.get()` and wrapping it in standard `try-catch-finally` blocks, **`CompletableFuture`** provides dedicated non-blocking completion stages: **`thenAccept`**, **`thenRun`**, **`whenComplete`**, and **`handle`**.
+
+=== Completion Stage Callback Matrix
+
+[cols="1,2,2,1", options="header"]
+|===
+| Method | Receives Inputs? | Can Modify Result? | Triggers On Exception?
+| **`thenAccept(Consumer)`** | Receives result | No (Returns `CompletableFuture<Void>`) | No (Success only)
+| **`thenRun(Runnable)`** | Receives nothing | No (Returns `CompletableFuture<Void>`) | No (Success only)
+| **`whenComplete(BiConsumer)`** | Receives `(result, exception)` | No (Passes through original result/exception) | **Yes**
+| **`handle(BiFunction)`** | Receives `(result, exception)` | **Yes** (Transforms result or recovers from error) | **Yes**
+|===
+
+---
+
+=== `whenComplete` vs. `handle`
+
+* **`whenComplete` (Side Effects / Monitoring):** Used for logging, telemetry, or resource cleanup. It observes the outcome (`result` or `exception`) without altering the result or suppressing the exception for downstream callers.
+* **`handle` (Transformation / Recovery):** Used to recover from exceptions or map errors into fallback return values. It consumes the result or exception and outputs a new result value.
+
+---
+
+=== Code Example: Post-Completion Operations
+
+[source,java]
+----
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+
+class CompletionCallbacksDemo {
+
+    public static void main(String[] args) {
+        System.out.println("--- 1. Success Callback Chain (thenAccept / thenRun) ---");
+
+        CompletableFuture.supplyAsync(() -> "Order-404")
+            // Consumes the result when ready
+            .thenAccept(orderId -> System.out.println("Processing notification for: " + orderId))
+            // Runs a Runnable after thenAccept completes
+            .thenRun(() -> System.out.println("Cleanup: Order notification pipeline closed."));
+
+
+        System.out.println("\n--- 2. Dual-Outcome Observer (whenComplete) ---");
+
+        fetchDataAsync(true)
+            // Inspects both result and exception without modifying the outcome
+            .whenComplete((result, ex) -> {
+                if (ex != null) {
+                    System.err.println("Metric Alert: Operation failed with: " + ex.getMessage());
+                } else {
+                    System.out.println("Metric Alert: Operation succeeded with output: " + result);
+                }
+            });
+
+
+        System.out.println("\n--- 3. Error Recovery & Result Transformation (handle) ---");
+
+        fetchDataAsync(false) // Triggers failure scenario
+            // Converts error into a safe default response
+            .handle((result, ex) -> {
+                if (ex != null) {
+                    System.out.println("Handled Exception: Recovering from error...");
+                    return "Fallback Cached Data"; // Fallback value
+                }
+                return result.toUpperCase();
+            })
+            .thenAccept(finalOutput -> System.out.println("Final Output: " + finalOutput));
+
+        // Wait briefly for daemon threads to finish output
+        sleep(500);
+    }
+
+    private static CompletableFuture<String> fetchDataAsync(boolean shouldSucceed) {
+        return CompletableFuture.supplyAsync(() -> {
+            sleep(200);
+            if (!shouldSucceed) {
+                throw new RuntimeException("Database connection timeout!");
+            }
+            return "Live Database Record";
+        });
+    }
+
+    private static void sleep(long ms) {
+        try { TimeUnit.MILLISECONDS.sleep(ms); } catch (InterruptedException ignored) {}
+    }
+}
+----
+
+== Composing `CompletableFuture` Instances in Java
+
+When building complex asynchronous workflows, tasks rarely run in isolation. You often need to chain dependent operations together or execute multiple independent tasks in parallel and combine their outputs.
+
+Java's `CompletableFuture` provides high-level composition operators—**`thenCompose`**, **`thenCombine`**, **`allOf`**, and **`anyOf`**—to orchestrate asynchronous tasks cleanly without falling into nested callback hell.
+
+=== Composition Operator Matrix
+
+[cols="1,2,2", options="header"]
+|===
+| Composition Method | Input Relationship | Behavior / Return Type
+| **`thenCompose`** | **Dependent (Sequential):** Task B depends on the output of Task A. | Flattens nested futures (`CompletableFuture<CompletableFuture<T>>` $\to$ `CompletableFuture<T>`). Similar to `flatMap`.
+| **`thenCombine`** | **Independent (Parallel):** Task A and Task B run concurrently. | Waits for both tasks to complete, then applies a `BiFunction` to combine both results into `CompletableFuture<V>`.
+| **`allOf`** | **Batch Wait (N Futures):** Multiple independent tasks running concurrently. | Returns a `CompletableFuture<Void>` that completes when **all** input futures complete.
+| **`anyOf`** | **Race Condition (N Futures):** Multiple alternative tasks running concurrently. | Returns a `CompletableFuture<Object>` that completes as soon as **any** single input future completes.
+|===
+
+---
+
+=== `thenCompose` vs. `thenCombine`
+
+* Use **`thenCompose`** when Task B needs Task A's result to start execution (e.g., fetch user ID $\to$ fetch user profile using that ID).
+* Use **`thenCombine`** when Task A and Task B can run at the exact same time independently, and you only care about merging their final values (e.g., fetch credit score and fetch account balance concurrently $\to$ calculate loan eligibility).
+
+---
+
+=== Code Example: Combining, Chaining, and Batch Processing
+
+[source,java]
+----
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+
+class ComposingFuturesDemo {
+
+    public static void main(String[] args) {
+        System.out.println("--- 1. Chaining Dependent Tasks (thenCompose) ---");
+
+        CompletableFuture<String> userCartFuture = getUserUserIdAsync()
+            .thenCompose(userId -> fetchUserCartAsync(userId)); // Flattens nested futures
+
+        System.out.println("User Cart: " + userCartFuture.join());
+
+
+        System.out.println("\n--- 2. Combining Independent Tasks in Parallel (thenCombine) ---");
+
+        CompletableFuture<Double> priceFuture = fetchProductPriceAsync();
+        CompletableFuture<Double> exchangeRateFuture = fetchExchangeRateAsync();
+
+        // Runs both in parallel, then merges results when both complete
+        CompletableFuture<Double> convertedPriceFuture = priceFuture
+            .thenCombine(exchangeRateFuture, (price, rate) -> price * rate);
+
+        System.out.println("Converted Price: $" + convertedPriceFuture.join());
+
+
+        System.out.println("\n--- 3. Waiting for Multiple Futures (allOf) ---");
+
+        CompletableFuture<String> f1 = CompletableFuture.supplyAsync(() -> { sleep(200); return "Service A"; });
+        CompletableFuture<String> f2 = CompletableFuture.supplyAsync(() -> { sleep(400); return "Service B"; });
+        CompletableFuture<String> f3 = CompletableFuture.supplyAsync(() -> { sleep(100); return "Service C"; });
+
+        List<CompletableFuture<String>> futuresList = List.of(f1, f2, f3);
+
+        // allOf creates a barrier that completes when all tasks finish
+        CompletableFuture<Void> allFutures = CompletableFuture.allOf(f1, f2, f3);
+
+        // Extracting all values safely after allOf completes
+        CompletableFuture<List<String>> combinedResults = allFutures.thenApply(v ->
+            futuresList.stream()
+                       .map(CompletableFuture::join) // Non-blocking because allOf guaranteed completion
+                       .toList()
+        );
+
+        System.out.println("All Service Results: " + combinedResults.join());
+    }
+
+    // Helper Async Methods
+    private static CompletableFuture<String> getUserUserIdAsync() {
+        return CompletableFuture.supplyAsync(() -> { sleep(100); return "USER-99"; });
+    }
+
+    private static CompletableFuture<String> fetchUserCartAsync(String userId) {
+        return CompletableFuture.supplyAsync(() -> { sleep(200); return "Cart contents for " + userId; });
+    }
+
+    private static CompletableFuture<Double> fetchProductPriceAsync() {
+        return CompletableFuture.supplyAsync(() -> { sleep(300); return 100.0; });
+    }
+
+    private static CompletableFuture<Double> fetchExchangeRateAsync() {
+        return CompletableFuture.supplyAsync(() -> { sleep(250); return 1.25; });
+    }
+
+    private static void sleep(long ms) {
+        try { TimeUnit.MILLISECONDS.sleep(ms); } catch (InterruptedException ignored) {}
+    }
+}
+----
+
+== Composing `CompletableFuture` Instances in Java
+
+When building complex asynchronous workflows, tasks rarely run in isolation. You often need to chain dependent operations together or execute multiple independent tasks in parallel and combine their outputs.
+
+Java's `CompletableFuture` provides high-level composition operators—**`thenCompose`**, **`thenCombine`**, **`allOf`**, and **`anyOf`**—to orchestrate asynchronous tasks cleanly without falling into nested callback hell.
+
+=== Composition Operator Matrix
+
+[cols="1,2,2", options="header"]
+|===
+| Composition Method | Input Relationship | Behavior / Return Type
+| **`thenCompose`** | **Dependent (Sequential):** Task B depends on the output of Task A. | Flattens nested futures (`CompletableFuture<CompletableFuture<T>>` $\to$ `CompletableFuture<T>`). Similar to `flatMap`.
+| **`thenCombine`** | **Independent (Parallel):** Task A and Task B run concurrently. | Waits for both tasks to complete, then applies a `BiFunction` to combine both results into `CompletableFuture<V>`.
+| **`allOf`** | **Batch Wait (N Futures):** Multiple independent tasks running concurrently. | Returns a `CompletableFuture<Void>` that completes when **all** input futures complete.
+| **`anyOf`** | **Race Condition (N Futures):** Multiple alternative tasks running concurrently. | Returns a `CompletableFuture<Object>` that completes as soon as **any** single input future completes.
+|===
+
+---
+
+=== `thenCompose` vs. `thenCombine`
+
+* Use **`thenCompose`** when Task B needs Task A's result to start execution (e.g., fetch user ID $\to$ fetch user profile using that ID).
+* Use **`thenCombine`** when Task A and Task B can run at the exact same time independently, and you only care about merging their final values (e.g., fetch credit score and fetch account balance concurrently $\to$ calculate loan eligibility).
+
+---
+
+=== Code Example: Combining, Chaining, and Batch Processing
+
+[source,java]
+----
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+
+class ComposingFuturesDemo {
+
+    public static void main(String[] args) {
+        System.out.println("--- 1. Chaining Dependent Tasks (thenCompose) ---");
+
+        CompletableFuture<String> userCartFuture = getUserUserIdAsync()
+            .thenCompose(userId -> fetchUserCartAsync(userId)); // Flattens nested futures
+
+        System.out.println("User Cart: " + userCartFuture.join());
+
+
+        System.out.println("\n--- 2. Combining Independent Tasks in Parallel (thenCombine) ---");
+
+        CompletableFuture<Double> priceFuture = fetchProductPriceAsync();
+        CompletableFuture<Double> exchangeRateFuture = fetchExchangeRateAsync();
+
+        // Runs both in parallel, then merges results when both complete
+        CompletableFuture<Double> convertedPriceFuture = priceFuture
+            .thenCombine(exchangeRateFuture, (price, rate) -> price * rate);
+
+        System.out.println("Converted Price: $" + convertedPriceFuture.join());
+
+
+        System.out.println("\n--- 3. Waiting for Multiple Futures (allOf) ---");
+
+        CompletableFuture<String> f1 = CompletableFuture.supplyAsync(() -> { sleep(200); return "Service A"; });
+        CompletableFuture<String> f2 = CompletableFuture.supplyAsync(() -> { sleep(400); return "Service B"; });
+        CompletableFuture<String> f3 = CompletableFuture.supplyAsync(() -> { sleep(100); return "Service C"; });
+
+        List<CompletableFuture<String>> futuresList = List.of(f1, f2, f3);
+
+        // allOf creates a barrier that completes when all tasks finish
+        CompletableFuture<Void> allFutures = CompletableFuture.allOf(f1, f2, f3);
+
+        // Extracting all values safely after allOf completes
+        CompletableFuture<List<String>> combinedResults = allFutures.thenApply(v ->
+            futuresList.stream()
+                       .map(CompletableFuture::join) // Non-blocking because allOf guaranteed completion
+                       .toList()
+        );
+
+        System.out.println("All Service Results: " + combinedResults.join());
+    }
+
+    // Helper Async Methods
+    private static CompletableFuture<String> getUserUserIdAsync() {
+        return CompletableFuture.supplyAsync(() -> { sleep(100); return "USER-99"; });
+    }
+
+    private static CompletableFuture<String> fetchUserCartAsync(String userId) {
+        return CompletableFuture.supplyAsync(() -> { sleep(200); return "Cart contents for " + userId; });
+    }
+
+    private static CompletableFuture<Double> fetchProductPriceAsync() {
+        return CompletableFuture.supplyAsync(() -> { sleep(300); return 100.0; });
+    }
+
+    private static CompletableFuture<Double> fetchExchangeRateAsync() {
+        return CompletableFuture.supplyAsync(() -> { sleep(250); return 1.25; });
+    }
+
+    private static void sleep(long ms) {
+        try { TimeUnit.MILLISECONDS.sleep(ms); } catch (InterruptedException ignored) {}
+    }
+}
+----
