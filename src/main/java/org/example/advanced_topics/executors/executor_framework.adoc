@@ -722,3 +722,216 @@ class ComposingFuturesDemo {
     }
 }
 ----
+
+== Waiting for Many Tasks in Java (`allOf` and `anyOf`)
+
+When coordinating multiple parallel tasks—such as querying three independent microservices or fetching data from redundant mirror servers—you often need to synchronize their outcomes before proceeding.
+
+Java's `CompletableFuture` provides two static methods to manage groups of futures: **`CompletableFuture.allOf()`** (all-or-nothing completion) and **`CompletableFuture.anyOf()`** (first-responder wins).
+
+=== `CompletableFuture.allOf()` vs. `CompletableFuture.anyOf()`
+
+[cols="1,2,2", options="header"]
+|===
+| Feature | `CompletableFuture.allOf(f1, f2, ...)` | `CompletableFuture.anyOf(f1, f2, ...)`
+| **Completion Trigger** | Completes only when **EVERY** provided future finishes (normally or exceptionally). | Completes as soon as **ANY SINGLE** future finishes.
+| **Return Type** | Returns **`CompletableFuture<Void>`**. Results must be extracted individually. | Returns **`CompletableFuture<Object>`**. Cast is required to access the winning result.
+| **Exception Handling** | If one future fails, `allOf` still waits for the rest to finish, then reports an `ExecutionException`. | If the fastest task fails, `anyOf` completes immediately with that failure.
+| **Primary Use Case** | Fan-out/fan-in batch aggregation (e.g., loading components of a dashboard concurrently). | Redundant lookups, speculative execution, or fastest-server response patterns.
+|===
+
+---
+
+=== The Best-Practice Pattern for `allOf()`
+
+Because `CompletableFuture.allOf()` returns `CompletableFuture<Void>`, it contains no direct payload. Attempting to call `.get()` or `.join()` on each individual future *before* `allOf` completes can introduce blocking bottlenecks.
+
+The idiomatic way to collect results into a unified list is:
+
+[source,text]
+----
+Futures: [F1, F2, F3] ──► CompletableFuture.allOf() ──► .thenApply() ──► List<Result>
+----
+
+---
+
+=== Code Example: Batch Waiting and First-Responder Patterns
+
+[source,java]
+----
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+
+class WaitingForManyTasksDemo {
+
+    public static void main(String[] args) {
+        System.out.println("--- 1. CompletableFuture.allOf (Fan-in Batch Aggregation) ---");
+
+        CompletableFuture<String> task1 = CompletableFuture.supplyAsync(() -> fetchFromService("Service A", 300));
+        CompletableFuture<String> task2 = CompletableFuture.supplyAsync(() -> fetchFromService("Service B", 100));
+        CompletableFuture<String> task3 = CompletableFuture.supplyAsync(() -> fetchFromService("Service C", 500));
+
+        List<CompletableFuture<String>> futures = List.of(task1, task2, task3);
+
+        // Create a master future that completes when all 3 tasks finish
+        CompletableFuture<Void> allMasterFuture = CompletableFuture.allOf(
+            futures.toArray(new CompletableFuture[0])
+        );
+
+        // Extract all results once all tasks have completed safely
+        CompletableFuture<List<String>> aggregatedResults = allMasterFuture.thenApply(v ->
+            futures.stream()
+                   .map(CompletableFuture::join) // Non-blocking because allOf guaranteed completion
+                   .toList()
+        );
+
+        System.out.println("Aggregated Output: " + aggregatedResults.join());
+
+
+        System.out.println("\n--- 2. CompletableFuture.anyOf (Fastest Response Wins) ---");
+
+        CompletableFuture<String> fastMirror = CompletableFuture.supplyAsync(() -> fetchFromService("Fast Server", 150));
+        CompletableFuture<String> slowMirror = CompletableFuture.supplyAsync(() -> fetchFromService("Slow Server", 800));
+
+        // Completes as soon as the fastest mirror responds
+        CompletableFuture<Object> fastestResponse = CompletableFuture.anyOf(fastMirror, slowMirror);
+
+        System.out.println("Fastest Server Output: " + fastestResponse.join());
+    }
+
+    private static String fetchFromService(String serviceName, long delayMs) {
+        try {
+            TimeUnit.MILLISECONDS.sleep(delayMs);
+        } catch (InterruptedException ignored) {}
+        return serviceName + " (took " + delayMs + "ms)";
+    }
+}
+----
+
+== Waiting for the First Task (`CompletableFuture.anyOf`)
+
+When you launch multiple redundant operations in parallel—such as querying three fallback microservices or hitting multiple database mirrors—you often only care about whichever task completes **first**.
+
+Java's **`CompletableFuture.anyOf()`** creates a composite future that completes as soon as **any single** input future finishes, discarding or ignoring the rest.
+
+=== Core Characteristics of `anyOf`
+
+[cols="1,2,2", options="header"]
+|===
+| Feature | Mechanics | Key Detail
+| **Return Type** | **`CompletableFuture<Object>`** | Returns a generic `Object` payload; requires casting to the expected return type.
+| **Success Trigger** | First to finish wins. | Completes immediately when the fastest task completes successfully.
+| **Failure Trigger** | Fastest exception wins. | If the fastest task fails with an exception, `anyOf` completes exceptionally immediately with that error.
+| **Primary Use Case** | Redundant server calls. | Hitting primary/secondary endpoints simultaneously to minimize latency (hedged requests).
+|===
+
+---
+
+=== Code Example: Hedged Request Pattern
+
+[source,java]
+----
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+
+class AnyOfDemo {
+    public static void main(String[] args) {
+        System.out.println("Initiating parallel hedged requests...");
+
+        // Launch 3 redundant tasks with varying delays
+        CompletableFuture<String> primaryDb = CompletableFuture.supplyAsync(() -> queryDb("Primary DB", 400));
+        CompletableFuture<String> replicaDb = CompletableFuture.supplyAsync(() -> queryDb("Replica DB", 150));
+        CompletableFuture<String> cacheDb   = CompletableFuture.supplyAsync(() -> queryDb("Redis Cache", 50));
+
+        // anyOf completes as soon as ANY single task finishes (Redis Cache wins here)
+        CompletableFuture<Object> fastestResult = CompletableFuture.anyOf(primaryDb, replicaDb, cacheDb);
+
+        // Cast Object result to expected String payload
+        String result = (String) fastestResult.join();
+        System.out.println("Result retrieved: " + result);
+    }
+
+    private static String queryDb(String source, long latencyMs) {
+        try {
+            TimeUnit.MILLISECONDS.sleep(latencyMs);
+        } catch (InterruptedException ignored) {}
+        return "Data from " + source + " (" + latencyMs + "ms)";
+    }
+}
+----
+
+== Handling Timeouts in `CompletableFuture`
+
+Asynchronous operations like network calls or remote API requests can hang or experience unpredictable delays. Without explicit timeouts, your threads or futures could wait indefinitely, consuming memory and starving downstream systems.
+
+Java 9 introduced native, non-blocking timeout controls directly on `CompletableFuture`: **`orTimeout()`** and **`completeOnTimeout()`**.
+
+=== Timeout Control Strategies
+
+[cols="1,2,2", options="header"]
+|===
+| Method Signature | Exception vs. Default Value | Behavior on Timeout
+| **`orTimeout(timeout, unit)`** | Throws **`TimeoutException`** | Forces the future to complete exceptionally with a `TimeoutException` if it doesn't finish within the deadline.
+| **`completeOnTimeout(defaultValue, timeout, unit)`** | Provides **Fallback Value** | Forces the future to complete successfully with the specified default value if it doesn't finish within the deadline.
+|===
+
+[NOTE]
+====
+Unlike legacy `Future.get(timeout, unit)`, these methods **do not block** the calling thread while waiting for the timeout to elapse. They schedule a system timer using an internal `ScheduledExecutorService` and trigger non-blocking callbacks.
+====
+
+---
+
+=== `orTimeout()` vs. `completeOnTimeout()`
+
+* Use **`orTimeout()`** when a delayed task is considered a hard failure that must be caught and handled via downstream `.exceptionally()` or `.handle()` stages.
+* Use **`completeOnTimeout()`** when a delayed task can gracefully fall back to default, cached, or degraded data without throwing an exception.
+
+---
+
+=== Code Example: Implementing Timeout Guards
+
+[source,java]
+----
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+
+class TimeoutDemo {
+
+    public static void main(String[] args) {
+        System.out.println("--- 1. Exception-based Timeout with orTimeout() ---");
+
+        fetchSlowApiData(1500) // Simulates 1.5s latency
+            .orTimeout(1, TimeUnit.SECONDS) // Hard deadline at 1.0s
+            .exceptionally(ex -> {
+                if (ex.getCause() instanceof TimeoutException) {
+                    System.err.println("API request timed out after 1s!");
+                }
+                return "Fallback Error Response";
+            })
+            .thenAccept(data -> System.out.println("Result 1: " + data))
+            .join();
+
+
+        System.out.println("\n--- 2. Fallback-based Timeout with completeOnTimeout() ---");
+
+        fetchSlowApiData(1500) // Simulates 1.5s latency
+            // Gracefully resolves to default value if delayed longer than 500ms
+            .completeOnTimeout("Default Cached Profile", 500, TimeUnit.MILLISECONDS)
+            .thenAccept(data -> System.out.println("Result 2: " + data))
+            .join();
+    }
+
+    private static CompletableFuture<String> fetchSlowApiData(long latencyMs) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                TimeUnit.MILLISECONDS.sleep(latencyMs);
+            } catch (InterruptedException ignored) {}
+            return "Live API Payload";
+        });
+    }
+}
+----
+
